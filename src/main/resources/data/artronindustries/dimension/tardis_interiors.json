@@ -1,0 +1,13 @@
+{
+  "type": "artronindustries:tardis_interiors",
+  "generator": {
+    "type": "minecraft:flat",
+    "settings": {
+      "biome": "artronindustries:tardis_interior",
+      "features": false,
+      "lakes": false,
+      "layers": [],
+      "structure_overrides": []
+    }
+  }
+}

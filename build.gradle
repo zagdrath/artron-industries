@@ -19,6 +19,7 @@ sourceSets.main.resources {
 }
 
 repositories {
+    mavenCentral()
 }
 
 base {
@@ -26,6 +27,8 @@ base {
 }
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(25)
+
+minecraft.accessTransformers.file(file('src/main/resources/META-INF/accesstransformer.cfg'))
 
 runs {
     configureEach {
@@ -39,10 +42,18 @@ runs {
 
     client {
         systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+        // ./gradlew runClient -Partronindustries.clientSmokeTest=true runs the scripted BOTI walkthrough (screenshots) in
+        // the world "botitest" and quits.
+        systemProperty 'artronindustries.clientSmokeTest', project.findProperty('artronindustries.clientSmokeTest') ?: 'false'
+        if (project.hasProperty('artronindustries.clientSmokeTest')) {
+            arguments.addAll '--quickPlaySingleplayer', 'botitest'
+        }
     }
 
     server {
         systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+        // ./gradlew runServer -Partronindustries.smokeTest=true runs the dedicated-server smoke test and stops.
+        systemProperty 'artronindustries.smokeTest', project.findProperty('artronindustries.smokeTest') ?: 'false'
         argument '--nogui'
     }
 
@@ -61,6 +72,14 @@ configurations {
 
 dependencies {
     implementation "net.neoforged:neoforge:${neo_version}"
+
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
 }
 
 tasks.withType(ProcessResources).configureEach {

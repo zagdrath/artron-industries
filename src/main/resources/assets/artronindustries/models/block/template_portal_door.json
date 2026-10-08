@@ -1,0 +1,20 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "#panel"
+  },
+  "elements": [
+    {
+      "from": [0, 0, 14],
+      "to": [16, 16, 16],
+      "faces": {
+        "north": { "uv": [0, 0, 16, 16], "texture": "#panel" },
+        "south": { "uv": [0, 0, 16, 16], "texture": "#back", "cullface": "south" },
+        "east":  { "uv": [0, 0, 2, 16], "texture": "#panel", "cullface": "east" },
+        "west":  { "uv": [14, 0, 16, 16], "texture": "#panel", "cullface": "west" },
+        "up":    { "uv": [0, 14, 16, 16], "texture": "#panel" },
+        "down":  { "uv": [0, 0, 16, 2], "texture": "#panel" }
+      }
+    }
+  ]
+}

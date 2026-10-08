@@ -1,0 +1,25 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "condition": {
+        "type": "minecraft:survives_explosion"
+      },
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "condition": {
+            "type": "minecraft:match_block",
+            "blocks": "artronindustries:interior_door",
+            "state": {
+              "half": "lower"
+            }
+          },
+          "name": "artronindustries:interior_door"
+        }
+      ],
+      "rolls": 1
+    }
+  ],
+  "random_sequence": "artronindustries:blocks/interior_door"
+}

@@ -1,0 +1,27 @@
+{
+  "values": [
+    "minecraft:banner",
+    "minecraft:beacon",
+    "minecraft:bell",
+    "minecraft:brushable_block",
+    "minecraft:campfire",
+    "minecraft:chest",
+    "minecraft:conduit",
+    "minecraft:copper_golem_statue",
+    "minecraft:decorated_pot",
+    "minecraft:enchanting_table",
+    "minecraft:ender_chest",
+    "minecraft:end_gateway",
+    "minecraft:end_portal",
+    "minecraft:hanging_sign",
+    "minecraft:lectern",
+    "minecraft:shelf",
+    "minecraft:shulker_box",
+    "minecraft:sign",
+    "minecraft:skull",
+    "minecraft:trapped_chest",
+    "minecraft:vault",
+    "minecraft:mob_spawner",
+    "minecraft:trial_spawner"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "parent": "artronindustries:block/template_portal_door",
+  "textures": {
+    "panel": "minecraft:block/white_concrete",
+    "back": "minecraft:block/white_concrete"
+  }
+}
