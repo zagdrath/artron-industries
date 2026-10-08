@@ -30,19 +30,23 @@ import net.zagdrath.artronindustries.tardis.ArtronDimensions;
  * Makes walking through a TARDIS doorway look continuous across the dimension change:
  * <ul>
  *     <li>the server announces the crossing ({@link BotiCrossingPayload}) right before it moves the player;</li>
- *     <li>for that one transition the loading screen draws nothing (NeoForge's dimension transition screen hook), so the
- *     world stays visible instead of the "loading terrain" panorama;</li>
+ *     <li>for that one transition the loading screen draws nothing, so the world stays visible instead of the "loading
+ *     terrain" panorama. It is opened as soon as the crossing is announced: the respawn then only updates it, instead of
+ *     opening one and forcing a frame before the new player is the camera, which would be black;</li>
  *     <li>until the destination's chunks are compiled, the cached view of the far side (which is exactly what the player
  *     was looking at) is drawn in place of the not-yet-loaded terrain ("arrival cover", see {@link BotiRenderer});</li>
  *     <li>the server teleports with yaw, pitch and velocity relative to the client's own, then sends
  *     {@link BotiArrivalPayload}: the new player is moved on by however far the old one had walked past the server's
- *     position, and gets the old one's previous-tick position, rotation and view bobbing, so the camera neither slows,
- *     snaps back nor skips a tick of interpolation.</li>
+ *     position, and gets the old one's previous-tick position, rotation, view bobbing and first-person hands, so the
+ *     camera neither slows, snaps back nor skips a tick of interpolation. The server sends the nearest chunks ahead of
+ *     that packet, so the player is normally released (and the screen closed) right then.</li>
  * </ul>
  * Other dimension changes into or out of TARDIS interiors (commands, death) keep the normal loading screen.
  */
 public final class SeamlessTransition {
     private static final long EXPECT_TIMEOUT_MS = 3000L;
+    /** How long the screen opened for an announced crossing waits for the respawn before giving up. */
+    private static final long RESPAWN_TIMEOUT_MS = 1000L;
     /** Upper bound for the arrival cover, in client ticks, in case chunks never arrive. */
     private static final int MAX_COVER_TICKS = 100;
     /** Extra ticks the cover stays after the player's own section is ready, while neighbouring sections finish. */
@@ -53,6 +57,7 @@ public final class SeamlessTransition {
     private static @Nullable PortalViewKey expectedKey;
     private static @Nullable ResourceKey<Level> expectedDestination;
     private static long expectedUntil;
+    private static long respawnBy;
 
     private static @Nullable PortalViewKey arrivalKey;
     private static @Nullable ResourceKey<Level> arrivalDestination;
@@ -75,18 +80,31 @@ public final class SeamlessTransition {
         expectedKey = payload.key();
         expectedDestination = payload.destination();
         expectedUntil = Util.getMillis() + EXPECT_TIMEOUT_MS;
+        respawnBy = Util.getMillis() + RESPAWN_TIMEOUT_MS;
         crossing = payload;
         departure = null;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.gui.screen() == null) {
+            mc.gui.setScreen(new Invisible(new LevelLoadTracker(), LevelLoadingScreen.Reason.OTHER));
+        }
     }
 
     /** The dimension change replaces the player: remember the old one before the position packet moves the new one. */
     static void onRespawn(ClientPlayerNetworkEvent.Clone event) {
-        if (crossing != null && Util.getMillis() <= expectedUntil && event.getNewPlayer().level().dimension() == crossing.destination()) {
+        BotiCrossingPayload c = crossing;
+        if (c != null && Util.getMillis() <= expectedUntil && event.getNewPlayer().level().dimension() == c.destination()) {
             departure = Departure.of(event.getOldPlayer());
+            event.getNewPlayer().firstPersonHandsAndItems = event.getOldPlayer().firstPersonHandsAndItems;
+            startCover(c.key(), c.destination());
         }
     }
 
     static void onArrival(BotiArrivalPayload payload) {
+        carryOver(payload);
+        releaseIfReady(Minecraft.getInstance());
+    }
+
+    private static void carryOver(BotiArrivalPayload payload) {
         BotiCrossingPayload c = crossing;
         Departure d = departure;
         crossing = null;
@@ -121,12 +139,28 @@ public final class SeamlessTransition {
         if (expectedKey == null || Util.getMillis() > expectedUntil) {
             return new LevelLoadingScreen(tracker, reason);
         }
-        arrivalKey = expectedKey;
-        arrivalDestination = expectedDestination;
+        startCover(expectedKey, expectedDestination);
+        return new Invisible(tracker, reason);
+    }
+
+    private static void startCover(PortalViewKey key, @Nullable ResourceKey<Level> destination) {
+        arrivalKey = key;
+        arrivalDestination = destination;
         arrivalTicks = 0;
         lingerTicks = 0;
         expectedKey = null;
-        return new Invisible(tracker, reason);
+    }
+
+    /**
+     * Vanilla keeps the player frozen until its section has been compiled for rendering. The arrival cover already shows
+     * the destination, so the player only needs its chunk (for collision): release it as soon as that is here.
+     */
+    private static void releaseIfReady(Minecraft mc) {
+        if (mc.gui.screen() instanceof Invisible && arrivalKey != null && mc.player != null && mc.level != null && mc.getConnection() != null
+                && mc.level.dimension() == arrivalDestination && mc.level.hasChunk(mc.player.getBlockX() >> 4, mc.player.getBlockZ() >> 4)) {
+            mc.getConnection().notifyPlayerLoaded();
+            mc.gui.setScreen(null);
+        }
     }
 
     /** The view to draw as arrival cover in {@code level}, or null when no cover is needed. */
@@ -140,17 +174,17 @@ public final class SeamlessTransition {
     }
 
     static void tick() {
+        Minecraft mc = Minecraft.getInstance();
         if (arrivalKey == null) {
+            // Announced, but the respawn never came (the server refused the teleport): give the player its controls back.
+            if (mc.gui.screen() instanceof Invisible && expectedKey != null && Util.getMillis() > respawnBy) {
+                expectedKey = null;
+                crossing = null;
+                mc.gui.setScreen(null);
+            }
             return;
         }
-        Minecraft mc = Minecraft.getInstance();
-        // Vanilla keeps the player frozen until its section has been compiled for rendering. The arrival cover already
-        // shows the destination, so the player only needs its chunk (for collision): release it as soon as that is here.
-        if (mc.gui.screen() instanceof Invisible && mc.player != null && mc.level != null && mc.getConnection() != null
-                && mc.level.hasChunk(mc.player.getBlockX() >> 4, mc.player.getBlockZ() >> 4)) {
-            mc.getConnection().notifyPlayerLoaded();
-            mc.gui.screen().onClose();
-        }
+        releaseIfReady(mc);
         boolean loaded = mc.getConnection() != null && mc.getConnection().hasClientLoaded();
         if (loaded) {
             lingerTicks++;

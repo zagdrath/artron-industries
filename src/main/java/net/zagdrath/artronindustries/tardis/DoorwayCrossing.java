@@ -160,6 +160,9 @@ public final class DoorwayCrossing {
             return;
         }
         if (moved instanceof ServerPlayer serverPlayer) {
+            // Send the nearest destination chunks now rather than next tick: the client holds the player still until its
+            // own chunk is there, and with it in the same flush as the arrival packet it can release the player at once.
+            serverPlayer.connection.chunkSender.sendNextChunks(serverPlayer);
             PacketDistributor.sendToPlayer(serverPlayer, new BotiArrivalPayload(key));
         } else {
             moved.setDeltaMovement(transition.deltaMovement());

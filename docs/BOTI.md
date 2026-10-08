@@ -131,7 +131,11 @@ lags the client by a tick or two, so players are teleported with yaw, pitch and 
 (`Relative.ROTATION` + `Relative.DELTA`, the turn being the doorway pair's rotation): speed, sprint and look direction
 carry over exactly. A `BotiArrivalPayload` follows the teleport; the client then moves the new player on by the lead its
 old one had over the server's crossing position, and copies over the previous-tick position and rotation, hand sway and
-view bobbing (access transformer on `ClientAvatarState`), so the camera neither snaps back nor pauses for a tick.
+view bobbing (access transformer on `ClientAvatarState`) and first-person hands (`LocalPlayer#firstPersonHandsAndItems`),
+so the camera neither snaps back nor pauses for a tick. The invisible loading screen is opened as soon as the crossing
+is announced (the respawn only updates an open loading screen; opening one forces a frame before the new player is the
+camera, which is black), and the server sends the nearest destination chunks ahead of the arrival packet, so the player
+is normally released and the screen closed in the same packet batch.
 
 Other dimension changes into or out of interiors (commands, death) keep the normal loading screen.
 
