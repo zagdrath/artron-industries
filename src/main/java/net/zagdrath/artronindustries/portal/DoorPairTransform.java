@@ -44,6 +44,11 @@ public final class DoorPairTransform {
         return new DoorPairTransform(turns, interiorAnchor.x - rotated.x, interiorAnchor.y - rotated.y, interiorAnchor.z - rotated.z);
     }
 
+    /** A pure rotation of {@code quarterTurns} clockwise quarter turns about the origin. */
+    public static DoorPairTransform rotation(int quarterTurns) {
+        return new DoorPairTransform(quarterTurns, 0.0, 0.0, 0.0);
+    }
+
     /** Clockwise (seen from above) quarter turns applied before translating. */
     public int quarterTurns() {
         return this.quarterTurns;

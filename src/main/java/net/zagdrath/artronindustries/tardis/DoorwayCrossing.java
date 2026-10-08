@@ -14,11 +14,14 @@ import java.util.UUID;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Relative;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.NeoForge;
@@ -29,6 +32,7 @@ import net.zagdrath.artronindustries.ArtronIndustries;
 import net.zagdrath.artronindustries.Config;
 import net.zagdrath.artronindustries.block.entity.PortalDoorBlockEntity;
 import net.zagdrath.artronindustries.boti.PortalViewKey;
+import net.zagdrath.artronindustries.network.BotiArrivalPayload;
 import net.zagdrath.artronindustries.network.BotiCrossingPayload;
 import net.zagdrath.artronindustries.portal.DoorPairTransform;
 import net.zagdrath.artronindustries.portal.PortalShape;
@@ -48,9 +52,12 @@ public final class DoorwayCrossing {
     /** Fraction of the open animation after which the doorway lets entities through. */
     private static final float PASSABLE_OPEN_AMOUNT = 0.5F;
 
-    private static final Map<UUID, Vec3> LAST_POSITIONS = new HashMap<>();
+    /** Last tracked position per entity, with its dimension: a position from another level says nothing about crossing. */
+    private static final Map<UUID, Tracked> LAST_POSITIONS = new HashMap<>();
     private static final Map<UUID, Long> COOLDOWN_UNTIL = new HashMap<>();
     private static long ticks;
+
+    private record Tracked(ResourceKey<Level> dimension, Vec3 position) {}
 
     private DoorwayCrossing() {}
 
@@ -83,7 +90,8 @@ public final class DoorwayCrossing {
                     UUID id = entity.getUUID();
                     seen.add(id);
                     Vec3 now = entity.position();
-                    Vec3 before = LAST_POSITIONS.put(id, now);
+                    Tracked last = LAST_POSITIONS.put(id, new Tracked(level.dimension(), now));
+                    Vec3 before = last != null && last.dimension() == level.dimension() ? last.position() : null;
                     if (entity instanceof ServerPlayer player) {
                         prewarm(server, record, side, player, shape, pos, facing, before, now);
                     }
@@ -134,19 +142,31 @@ public final class DoorwayCrossing {
         Direction arrivalFacing = record.doorFacing(to);
         // The entity is just behind the near plane, which maps just in front of the far plane; nudge it clear.
         Vec3 target = transform.apply(position).add(Vec3.atLowerCornerOf(arrivalFacing.getUnitVec3i()).scale(ARRIVAL_OFFSET));
-        Vec3 velocity = transform.applyVelocity(entity.getDeltaMovement());
-        float yaw = transform.applyYaw(entity.getYRot());
+        PortalViewKey key = new PortalViewKey(record.uuid(), from);
+        TeleportTransition transition;
         if (entity instanceof ServerPlayer serverPlayer) {
-            PacketDistributor.sendToPlayer(serverPlayer, new BotiCrossingPayload(new PortalViewKey(record.uuid(), from), destination.dimension()));
+            PacketDistributor.sendToPlayer(serverPlayer, new BotiCrossingPayload(key, destination.dimension(), position, transform.quarterTurns()));
+            // The client moves its own player and the server's copy lags it by a tick or two, so the turn and the velocity
+            // are relative to what the client has: it keeps exactly its own look direction and speed, turned with the doorway.
+            transition = new TeleportTransition(destination, target, Vec3.ZERO, transform.applyYaw(0.0F), 0.0F,
+                    Relative.union(Relative.ROTATION, Relative.DELTA), TeleportTransition.DO_NOTHING);
+        } else {
+            Vec3 velocity = transform.applyVelocity(entity.getDeltaMovement());
+            transition = new TeleportTransition(destination, target, velocity, transform.applyYaw(entity.getYRot()), entity.getXRot(),
+                    TeleportTransition.DO_NOTHING);
         }
-        Entity moved = entity.teleport(new TeleportTransition(destination, target, velocity, yaw, entity.getXRot(), TeleportTransition.DO_NOTHING));
+        Entity moved = entity.teleport(transition);
         if (moved == null) {
             return;
         }
-        moved.setYHeadRot(yaw);
-        moved.setDeltaMovement(velocity);
+        if (moved instanceof ServerPlayer serverPlayer) {
+            PacketDistributor.sendToPlayer(serverPlayer, new BotiArrivalPayload(key));
+        } else {
+            moved.setDeltaMovement(transition.deltaMovement());
+        }
+        moved.setYHeadRot(moved.getYRot());
         COOLDOWN_UNTIL.put(moved.getUUID(), ticks + Config.CROSSING_COOLDOWN.getAsInt());
-        LAST_POSITIONS.put(moved.getUUID(), moved.position());
+        LAST_POSITIONS.put(moved.getUUID(), new Tracked(destination.dimension(), moved.position()));
         ArtronIndustries.LOGGER.debug("{} walked through TARDIS #{} {} -> {}", entity.getName().getString(), record.id(), from, to);
     }
 

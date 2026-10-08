@@ -23,6 +23,7 @@ Walking into the doorway plane teleports the entity with the same transform; the
    ├ entities → ───────── BotiEntitiesPayload ─┘ BotiRenderer        (extract → prepare → draw in the stencil)
    └ portal_view chunk ticket                  SeamlessTransition  (no loading screen, arrival cover)
  DoorwayCrossing ──────── BotiCrossingPayload ─►
+   └ (teleport) ───────── BotiArrivalPayload ──►
 ```
 
 ## Core abstractions (`portal` package)
@@ -125,8 +126,14 @@ moving the player. For that transition only, NeoForge's `RegisterDimensionTransi
 that draws nothing; the cached view of the far side is drawn unmasked in its real position ("arrival cover") until the
 real chunks are compiled; and the player is released as soon as its chunk is present instead of when its section has
 compiled (one access transformer: `ClientPacketListener#notifyPlayerLoaded`). While the camera is in a doorway plane or
-just through it before the server's teleport arrives, the far side is drawn full-screen. Other dimension changes into or
-out of interiors (commands, death) keep the normal loading screen.
+just through it before the server's teleport arrives, the far side is drawn full-screen. The server's copy of a player
+lags the client by a tick or two, so players are teleported with yaw, pitch and velocity relative to the client's own
+(`Relative.ROTATION` + `Relative.DELTA`, the turn being the doorway pair's rotation): speed, sprint and look direction
+carry over exactly. A `BotiArrivalPayload` follows the teleport; the client then moves the new player on by the lead its
+old one had over the server's crossing position, and copies over the previous-tick position and rotation, hand sway and
+view bobbing (access transformer on `ClientAvatarState`), so the camera neither snaps back nor pauses for a tick.
+
+Other dimension changes into or out of interiors (commands, death) keep the normal loading screen.
 
 **Shader packs.** If Iris or Oculus is installed, doorways use the fallback surface (dark shimmer) unless
 `boti.forceWithShaders` is set: shader packs replace the pipelines BOTI relies on. The same fallback is used for

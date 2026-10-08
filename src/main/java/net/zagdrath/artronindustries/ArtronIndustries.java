@@ -60,11 +60,24 @@ public class ArtronIndustries {
         ArtronTickets.TICKET_TYPES.register(modEventBus);
         modEventBus.addListener(RegisterPayloadHandlersEvent.class, ArtronNetwork::register);
 
-        modContainer.registerConfig(ModConfig.Type.LOCAL, Config.SPEC, MODID + "-common.toml");
+        modContainer.registerConfig(localConfigType(), Config.SPEC, MODID + "-common.toml");
 
         NeoForge.EVENT_BUS.addListener(RegisterCommandsEvent.class, e -> ArtronCommands.register(e.getDispatcher()));
         PortalWatcher.init();
         DoorwayCrossing.init();
         SmokeTest.registerIfEnabled();
+    }
+
+    /**
+     * FML 12.0.8 (partway through the 26.3 betas) renamed ModConfig.Type.COMMON to LOCAL. Looking the constant up by
+     * name keeps one jar loading on betas from either side of the rename.
+     */
+    private static ModConfig.Type localConfigType() {
+        for (ModConfig.Type type : ModConfig.Type.values()) {
+            if (type.name().equals("LOCAL")) {
+                return type;
+            }
+        }
+        return ModConfig.Type.valueOf("COMMON");
     }
 }

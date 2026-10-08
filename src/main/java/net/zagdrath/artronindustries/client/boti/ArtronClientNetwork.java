@@ -10,6 +10,7 @@ import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.network.event.RegisterClientPayloadHandlersEvent;
 import net.neoforged.neoforge.common.NeoForge;
+import net.zagdrath.artronindustries.network.BotiArrivalPayload;
 import net.zagdrath.artronindustries.network.BotiClearPayload;
 import net.zagdrath.artronindustries.network.BotiCrossingPayload;
 import net.zagdrath.artronindustries.network.BotiDeltaPayload;
@@ -27,12 +28,14 @@ public final class ArtronClientNetwork {
             event.register(BotiClearPayload.TYPE, (payload, context) -> BotiClientCache.onClear(payload));
             event.register(BotiEntitiesPayload.TYPE, (payload, context) -> BotiEntities.onPayload(payload));
             event.register(BotiCrossingPayload.TYPE, (payload, context) -> SeamlessTransition.onCrossing(payload));
+            event.register(BotiArrivalPayload.TYPE, (payload, context) -> SeamlessTransition.onArrival(payload));
         });
         NeoForge.EVENT_BUS.addListener(ClientTickEvent.Post.class, e -> {
             BotiClientCache.tick();
             BotiEntities.tick();
             SeamlessTransition.tick();
         });
+        NeoForge.EVENT_BUS.addListener(ClientPlayerNetworkEvent.Clone.class, SeamlessTransition::onRespawn);
         NeoForge.EVENT_BUS.addListener(ClientPlayerNetworkEvent.LoggingOut.class, e -> BotiClientCache.clearAll());
     }
 }

@@ -10,14 +10,20 @@ import org.jspecify.annotations.Nullable;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.LevelLoadingScreen;
+import net.minecraft.client.entity.ClientAvatarState;
 import net.minecraft.client.multiplayer.LevelLoadTracker;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.Util;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.RegisterDimensionTransitionScreenEvent;
 import net.zagdrath.artronindustries.boti.PortalViewKey;
+import net.zagdrath.artronindustries.network.BotiArrivalPayload;
 import net.zagdrath.artronindustries.network.BotiCrossingPayload;
+import net.zagdrath.artronindustries.portal.DoorPairTransform;
 import net.zagdrath.artronindustries.tardis.ArtronDimensions;
 
 /**
@@ -27,7 +33,11 @@ import net.zagdrath.artronindustries.tardis.ArtronDimensions;
  *     <li>for that one transition the loading screen draws nothing (NeoForge's dimension transition screen hook), so the
  *     world stays visible instead of the "loading terrain" panorama;</li>
  *     <li>until the destination's chunks are compiled, the cached view of the far side (which is exactly what the player
- *     was looking at) is drawn in place of the not-yet-loaded terrain ("arrival cover", see {@link BotiRenderer}).</li>
+ *     was looking at) is drawn in place of the not-yet-loaded terrain ("arrival cover", see {@link BotiRenderer});</li>
+ *     <li>the server teleports with yaw, pitch and velocity relative to the client's own, then sends
+ *     {@link BotiArrivalPayload}: the new player is moved on by however far the old one had walked past the server's
+ *     position, and gets the old one's previous-tick position, rotation and view bobbing, so the camera neither slows,
+ *     snaps back nor skips a tick of interpolation.</li>
  * </ul>
  * Other dimension changes into or out of TARDIS interiors (commands, death) keep the normal loading screen.
  */
@@ -37,6 +47,8 @@ public final class SeamlessTransition {
     private static final int MAX_COVER_TICKS = 100;
     /** Extra ticks the cover stays after the player's own section is ready, while neighbouring sections finish. */
     private static final int COVER_LINGER_TICKS = 6;
+    /** The client is never more than a few ticks ahead of the server; a larger lead is not carried over. */
+    private static final double MAX_LEAD = 4.0;
 
     private static @Nullable PortalViewKey expectedKey;
     private static @Nullable ResourceKey<Level> expectedDestination;
@@ -46,6 +58,9 @@ public final class SeamlessTransition {
     private static @Nullable ResourceKey<Level> arrivalDestination;
     private static int arrivalTicks;
     private static int lingerTicks;
+
+    private static @Nullable BotiCrossingPayload crossing;
+    private static @Nullable Departure departure;
 
     private SeamlessTransition() {}
 
@@ -60,6 +75,46 @@ public final class SeamlessTransition {
         expectedKey = payload.key();
         expectedDestination = payload.destination();
         expectedUntil = Util.getMillis() + EXPECT_TIMEOUT_MS;
+        crossing = payload;
+        departure = null;
+    }
+
+    /** The dimension change replaces the player: remember the old one before the position packet moves the new one. */
+    static void onRespawn(ClientPlayerNetworkEvent.Clone event) {
+        if (crossing != null && Util.getMillis() <= expectedUntil && event.getNewPlayer().level().dimension() == crossing.destination()) {
+            departure = Departure.of(event.getOldPlayer());
+        }
+    }
+
+    static void onArrival(BotiArrivalPayload payload) {
+        BotiCrossingPayload c = crossing;
+        Departure d = departure;
+        crossing = null;
+        departure = null;
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (c == null || d == null || player == null || !payload.key().equals(c.key()) || player.level().dimension() != c.destination()) {
+            return;
+        }
+        Vec3 lead = d.position().subtract(c.departure());
+        if (lead.lengthSqr() > MAX_LEAD * MAX_LEAD) {
+            return;
+        }
+        // The server placed the player where its lagging copy crossed. The doorway pair is a rigid transform, so the
+        // client's lead over that copy, and its previous-tick position, map across with the rotation alone.
+        DoorPairTransform rotation = DoorPairTransform.rotation(c.quarterTurns());
+        float turn = rotation.applyYaw(0.0F);
+        Vec3 placed = player.position();
+        player.setPos(placed.add(rotation.applyVelocity(lead)));
+        player.setOldPosAndRot(placed.add(rotation.applyVelocity(d.oldPosition().subtract(c.departure()))), d.yRotO() + turn, d.xRotO());
+        player.yBob = d.yBob() + turn;
+        player.yBobO = d.yBobO() + turn;
+        player.xBob = d.xBob();
+        player.xBobO = d.xBobO();
+        ClientAvatarState avatar = player.avatarState();
+        avatar.walkDist = d.walkDist();
+        avatar.walkDistO = d.walkDistO();
+        avatar.bob = d.bob();
+        avatar.bobO = d.bobO();
     }
 
     private static LevelLoadingScreen screen(LevelLoadTracker tracker, LevelLoadingScreen.Reason reason) {
@@ -103,6 +158,16 @@ public final class SeamlessTransition {
         if (++arrivalTicks > MAX_COVER_TICKS || lingerTicks > COVER_LINGER_TICKS) {
             arrivalKey = null;
             arrivalDestination = null;
+        }
+    }
+
+    /** What the old player had that a dimension change resets on the new one. */
+    private record Departure(Vec3 position, Vec3 oldPosition, float yRotO, float xRotO, float yBob, float xBob, float yBobO, float xBobO,
+                             float walkDist, float walkDistO, float bob, float bobO) {
+        static Departure of(LocalPlayer p) {
+            ClientAvatarState a = p.avatarState();
+            return new Departure(p.position(), p.oldPosition(), p.yRotO, p.xRotO, p.yBob, p.xBob, p.yBobO, p.xBobO,
+                    a.walkDist, a.walkDistO, a.bob, a.bobO);
         }
     }
 
