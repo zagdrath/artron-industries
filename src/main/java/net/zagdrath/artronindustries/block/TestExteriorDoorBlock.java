@@ -18,7 +18,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -30,6 +33,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import net.zagdrath.artronindustries.block.entity.PortalDoorBlockEntity;
 import net.zagdrath.artronindustries.portal.PortalShape;
 import net.zagdrath.artronindustries.registry.ArtronBlockEntities;
+import net.zagdrath.artronindustries.registry.ArtronBlocks;
 import net.zagdrath.artronindustries.tardis.DoorState;
 import net.zagdrath.artronindustries.tardis.TardisInteriorManager;
 import net.zagdrath.artronindustries.tardis.TardisRecord;
@@ -39,15 +43,16 @@ import net.zagdrath.artronindustries.tardis.TardisRecord;
  * allocates a new TARDIS and links this door as its exterior.
  * <p>
  * The box is 1 3/4 blocks square and 3 1/4 tall, centred on the lower block, with its double doors on the {@code FACING}
- * side. Its outline and collision are built from the model's own boxes; the doors are 18 px wide, 41 px tall and stand
+ * side. It takes three blocks: the two halves of this block, and an {@link ExteriorTopBlock} above for the roof. Its outline and collision are built from the model's own boxes; the doors are 18 px wide, 41 px tall and stand
  * on the 2 px base, their front face 11 px in front of the block centre.
  */
 public class TestExteriorDoorBlock extends PortalDoorBlock {
     /**
-     * The doorway: the opening between the door frame, its plane a quarter pixel in front of the shut doors so they never
-     * fight it for depth. The doors swing in behind it.
+     * The doorway: the opening between the door frame, its plane on the front face of the shut doors, flush with the back
+     * of the frame. The doors swing in behind it and are drawn again over the far side; with the plane any further out,
+     * the slice of frame and door between it and the doors would show the far side when seen edge-on.
      */
-    public static final PortalShape HUDOLIN_DOORWAY = new PortalShape(18.0F / 16.0F, 41.0F / 16.0F, 2.0F / 16.0F, 11.25F / 16.0F);
+    public static final PortalShape HUDOLIN_DOORWAY = new PortalShape(18.0F / 16.0F, 41.0F / 16.0F, 2.0F / 16.0F, 11.0F / 16.0F);
 
     /** The model, everything but the doors: base, corner posts, walls and their trim, sign plates, roof, door frame. */
     private static final VoxelShape BODY = body();
@@ -62,7 +67,7 @@ public class TestExteriorDoorBlock extends PortalDoorBlock {
     private static final VoxelShape RIGHT_OPEN = ModelBox.of(-9, -43, 0, 9, 41, 1).turned(1, 9, -11).shape();
     private static final VoxelShape LEFT_OPEN = Shapes.or(ModelBox.of(0, -43, 0, 9, 41, 1).turned(3, -9, -11).shape(),
             ModelBox.of(8.5, -43, -0.5, 1, 41, 1).turned(3, -9, -11).shape());
-    /** By half (lower first) and door state, then facing. */
+    /** By part (lower, upper, top), door state, then facing. */
     private static final Map<DoorState, Map<Direction, VoxelShape>>[] OUTLINE = shapes(false);
     private static final Map<DoorState, Map<Direction, VoxelShape>>[] COLLISION = shapes(true);
 
@@ -140,14 +145,14 @@ public class TestExteriorDoorBlock extends PortalDoorBlock {
 
     @SuppressWarnings("unchecked")
     private static Map<DoorState, Map<Direction, VoxelShape>>[] shapes(boolean collision) {
-        Map<DoorState, Map<Direction, VoxelShape>>[] shapes = new Map[2];
-        for (int half = 0; half < 2; half++) {
-            shapes[half] = new EnumMap<>(DoorState.class);
+        Map<DoorState, Map<Direction, VoxelShape>>[] shapes = new Map[3];
+        for (int part = 0; part < 3; part++) {
+            shapes[part] = new EnumMap<>(DoorState.class);
             for (DoorState doors : DoorState.values()) {
                 VoxelShape left = doors.leftOpen() ? LEFT_OPEN : collision && doors.rightOpen() ? LEFT_SHUT_NARROW : LEFT_SHUT;
                 VoxelShape shape = Shapes.or(BODY, doors.rightOpen() ? RIGHT_OPEN : RIGHT_SHUT, left).optimize();
-                // The upper half's shapes are the same box, seen from one block up.
-                shapes[half].put(doors, Shapes.rotateHorizontal(half == 0 ? shape : shape.move(0.0, -1.0, 0.0)));
+                // Every part has the whole box, seen from its own height.
+                shapes[part].put(doors, Shapes.rotateHorizontal(shape.move(0.0, -part, 0.0)));
             }
         }
         return shapes;
@@ -181,8 +186,35 @@ public class TestExteriorDoorBlock extends PortalDoorBlock {
 
     private static VoxelShape shape(Map<DoorState, Map<Direction, VoxelShape>>[] shapes, BlockState state, BlockGetter level, BlockPos pos) {
         boolean lower = state.getValue(HALF) == DoubleBlockHalf.LOWER;
-        DoorState doors = level.getBlockEntity(lower ? pos : pos.below()) instanceof PortalDoorBlockEntity door ? door.doorState() : DoorState.CLOSED;
-        return shapes[lower ? 0 : 1].get(doors).get(state.getValue(FACING));
+        return shape(shapes == COLLISION, lower ? 0 : 1, state.getValue(FACING), level, lower ? pos : pos.below());
+    }
+
+    /** The box's outline or collision for one of its parts (0 lower, 1 upper, 2 top), with the doors as they are. */
+    static VoxelShape shape(boolean collision, int part, Direction facing, BlockGetter level, BlockPos lowerPos) {
+        DoorState doors = level.getBlockEntity(lowerPos) instanceof PortalDoorBlockEntity door ? door.doorState() : DoorState.CLOSED;
+        return (collision ? COLLISION : OUTLINE)[part].get(doors).get(facing);
+    }
+
+    @Override
+    public @Nullable BlockState getStateForPlacement(BlockPlaceContext context) {
+        BlockState state = super.getStateForPlacement(context);
+        BlockPos top = context.getClickedPos().above(2);
+        return state != null && top.getY() <= context.getLevel().getMaxY() && context.getLevel().getBlockState(top).canBeReplaced(context) ? state : null;
+    }
+
+    @Override
+    public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity by, ItemStack itemStack) {
+        super.setPlacedBy(level, pos, state, by, itemStack);
+        placeTop(level, pos, state.getValue(FACING));
+    }
+
+    /** Puts the {@link ExteriorTopBlock} above a box that lacks one (boxes placed before it existed), if there is room. */
+    public static void placeTop(Level level, BlockPos lowerPos, Direction facing) {
+        BlockPos top = lowerPos.above(2);
+        BlockState current = level.getBlockState(top);
+        if (!current.is(ArtronBlocks.TEST_EXTERIOR_TOP.get()) && current.canBeReplaced()) {
+            level.setBlockAndUpdate(top, ArtronBlocks.TEST_EXTERIOR_TOP.get().defaultBlockState().setValue(FACING, facing));
+        }
     }
 
     @Override
@@ -202,12 +234,14 @@ public class TestExteriorDoorBlock extends PortalDoorBlock {
      * Returns {@code null} if there is no room.
      */
     public @Nullable TardisRecord placeNewTardis(ServerLevel level, BlockPos pos, Direction facing) {
-        if (!level.getBlockState(pos).canBeReplaced() || !level.getBlockState(pos.above()).canBeReplaced()) {
+        if (!level.getBlockState(pos).canBeReplaced() || !level.getBlockState(pos.above()).canBeReplaced()
+                || !level.getBlockState(pos.above(2)).canBeReplaced()) {
             return null;
         }
         BlockState lower = this.defaultBlockState().setValue(FACING, facing).setValue(HALF, DoubleBlockHalf.LOWER);
         level.setBlockAndUpdate(pos, lower);
         level.setBlockAndUpdate(pos.above(), lower.setValue(HALF, DoubleBlockHalf.UPPER));
+        placeTop(level, pos, facing);
         if (!(level.getBlockEntity(pos) instanceof PortalDoorBlockEntity door)) {
             return null;
         }

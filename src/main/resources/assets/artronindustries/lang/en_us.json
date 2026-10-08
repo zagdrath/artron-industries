@@ -8,6 +8,7 @@
   "artronindustries.configuration.section.artronindustries.client.toml.title": "Artron Industries: Client",
   "itemGroup.artronindustries": "Artron Industries",
   "block.artronindustries.test_exterior_door": "TARDIS Exterior (Hudolin)",
+  "block.artronindustries.test_exterior_top": "TARDIS Exterior (Hudolin)",
   "block.artronindustries.interior_door": "TARDIS Interior Door (Placeholder)",
   "message.artronindustries.tardis.created": "TARDIS #%s materialised",
   "message.artronindustries.door.unlinked": "This door is not linked to a TARDIS",

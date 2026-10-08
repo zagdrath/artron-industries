@@ -8,6 +8,7 @@ package net.zagdrath.artronindustries.block.entity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.state.BlockState;
+import net.zagdrath.artronindustries.block.TestExteriorDoorBlock;
 import net.zagdrath.artronindustries.portal.OpenSpan;
 import net.zagdrath.artronindustries.portal.PortalShape;
 import net.zagdrath.artronindustries.portal.PortalSide;
@@ -17,8 +18,20 @@ import net.zagdrath.artronindustries.tardis.TardisRecord;
 
 /** The TARDIS exterior's block entity: the outside end of the doorway, with double doors. */
 public class TestExteriorDoorBlockEntity extends PortalDoorBlockEntity {
+    private boolean topChecked;
+
     public TestExteriorDoorBlockEntity(BlockPos pos, BlockState state) {
         super(ArtronBlockEntities.TEST_EXTERIOR_DOOR.get(), pos, state);
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        // Boxes placed before the exterior had a top block get one (not in onLoad: no block changes while a chunk loads).
+        if (!this.topChecked && this.level instanceof ServerLevel serverLevel) {
+            this.topChecked = true;
+            TestExteriorDoorBlock.placeTop(serverLevel, this.worldPosition, this.getFacing());
+        }
     }
 
     @Override

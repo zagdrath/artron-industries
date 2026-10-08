@@ -1,0 +1,16 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "artronindustries:block/hudolin_exterior"
+    },
+    "facing=east": {
+      "model": "artronindustries:block/hudolin_exterior"
+    },
+    "facing=south": {
+      "model": "artronindustries:block/hudolin_exterior"
+    },
+    "facing=west": {
+      "model": "artronindustries:block/hudolin_exterior"
+    }
+  }
+}
