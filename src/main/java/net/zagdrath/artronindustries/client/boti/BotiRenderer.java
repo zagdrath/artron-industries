@@ -117,6 +117,10 @@ public final class BotiRenderer {
         boolean ownsBlockEntities;
         /** The near-side door this doorway belongs to, when it is a real one. */
         @Nullable PortalEndpoint endpoint;
+        /** A shut door: only its mesh is built (see {@link #warm}), nothing is drawn. */
+        boolean warmOnly;
+        /** Not drawn this frame: warm only, or its view has no mesh yet. */
+        boolean hidden;
 
         DoorDraw(PortalViewKey key, BotiClientCache.@Nullable View view, Vector3f[] corners, double distanceSqr, boolean fallback, boolean debugFloating) {
             this.key = key;
@@ -185,6 +189,9 @@ public final class BotiRenderer {
             }
             OpenSpan span = endpoint.getOpenSpan(partialTick);
             if (span.isEmpty()) {
+                if (!fallback) {
+                    warm(endpoint, level, camera, maxDistance, draws);
+                }
                 continue;
             }
             PortalShape shape = endpoint.getPortalShape();
@@ -252,6 +259,29 @@ public final class BotiRenderer {
             }
         }
         event.getRenderState().setRenderData(DRAWS, draws);
+    }
+
+    /**
+     * A shut door in front of the camera whose view the server already streams: build that view's mesh now, so the far
+     * side is there the moment the doors start to open.
+     */
+    private static void warm(PortalEndpoint endpoint, ClientLevel level, Vec3 camera, double maxDistance, List<DoorDraw> draws) {
+        PortalShape shape = endpoint.getPortalShape();
+        BlockPos pos = endpoint.getPortalPos();
+        Direction facing = endpoint.getFacing();
+        double distanceSqr = shape.center(pos, facing).distanceToSqr(camera);
+        if (distanceSqr > maxDistance * maxDistance || shape.signedDistance(pos, facing, camera) <= 0.0) {
+            return;
+        }
+        PortalViewKey key = new PortalViewKey(endpoint.getTardisId(), endpoint.getPortalSide());
+        BotiClientCache.View view = BotiClientCache.get(key);
+        if (view == null || !view.snapshot().geometry().nearPos().equals(pos)) {
+            return;
+        }
+        DoorDraw draw = new DoorDraw(key, view, new Vector3f[0], distanceSqr, false, false);
+        draw.warmOnly = true;
+        computeView(draw, level, camera);
+        draws.add(draw);
     }
 
     /** A camera-facing quad just past the near plane that covers the whole view. */
@@ -341,12 +371,16 @@ public final class BotiRenderer {
         for (DoorDraw draw : draws) {
             if (draw.view != null && draw.boxLocalCamera != null) {
                 draw.mesh = BotiMeshCache.prepare(draw.view, draw.skyToBlock, draw.boxLocalCamera);
-                draw.fog = fogBuffer(draw);
-                FOG_BUFFERS.add(draw.fog);
+                if (!draw.warmOnly) {
+                    draw.fog = fogBuffer(draw);
+                    FOG_BUFFERS.add(draw.fog);
+                }
                 if (draw.mesh != null) {
                     sequentialIndices = Math.max(sequentialIndices, draw.mesh.maxSequentialIndices());
                 }
             }
+            // Until the far side can be drawn, leave the doorway alone rather than flash its bare backdrop.
+            draw.hidden = draw.warmOnly || (!draw.fallback && !draw.debugFloating && draw.mesh == null);
         }
 
         // Doorway quads for every door: mark, backdrop and seal (or a single fallback quad).
@@ -354,7 +388,7 @@ public final class BotiRenderer {
         try (ByteBufferBuilder bytes = new ByteBufferBuilder(draws.size() * QUADS_PER_DOOR * 4 * DefaultVertexFormat.POSITION_COLOR.getVertexSize())) {
             BufferBuilder builder = new BufferBuilder(bytes, PrimitiveTopology.QUADS, DefaultVertexFormat.POSITION_COLOR);
             for (DoorDraw draw : draws) {
-                if (draw.debugFloating) {
+                if (draw.debugFloating || draw.hidden) {
                     continue;
                 }
                 draw.firstQuad = quads;
@@ -438,7 +472,7 @@ public final class BotiRenderer {
         Collection<Entity> entities = List.of();
         @Nullable BlockEntity overlayDoor = null;
         for (DoorDraw draw : draws) {
-            if (draw.fallback || draw.view == null || draw.model == null || draw.mesh == null) {
+            if (draw.hidden || draw.fallback || draw.view == null || draw.model == null || draw.mesh == null) {
                 continue;
             }
             blockEntities = ArtronClientConfig.RENDER_BLOCK_ENTITIES.getAsBoolean() ? BotiBlockEntities.get(draw.view, mc.level) : List.of();
@@ -556,7 +590,12 @@ public final class BotiRenderer {
         var indices = RenderSystem.getSequentialBuffer(PrimitiveTopology.QUADS);
         GpuBuffer sequential = indices.getBuffer();
 
+        int drawn = 0;
         for (DoorDraw draw : draws) {
+            if (draw.hidden) {
+                continue;
+            }
+            drawn++;
             pass.pushDebugGroup(() -> "BOTI " + draw.key);
             if (draw.debugFloating) {
                 drawMesh(pass, draw, view, sequential, indices.type(), mc, true);
@@ -603,7 +642,7 @@ public final class BotiRenderer {
             drawQuad(pass, BotiPipelines.SEAL_DOORWAY, identity, sequential, indices.type(), draw.firstQuad + 2);
             pass.popDebugGroup();
         }
-        lastDrawCount = draws.size();
+        lastDrawCount = drawn;
         lastDrawMs = (System.nanoTime() - start) / 1.0E6;
     }
 

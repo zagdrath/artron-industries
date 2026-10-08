@@ -5,7 +5,9 @@
 
 package net.zagdrath.artronindustries.block;
 
+import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 
 import org.jspecify.annotations.Nullable;
@@ -37,8 +39,8 @@ import net.zagdrath.artronindustries.tardis.TardisRecord;
  * allocates a new TARDIS and links this door as its exterior.
  * <p>
  * The box is 1 3/4 blocks square and 3 1/4 tall, centred on the lower block, with its double doors on the {@code FACING}
- * side. Shapes below are in block pixels for a north-facing box; the doors are 18 px wide, 41 px tall and stand on the
- * 2 px base, their front face 11 px in front of the block centre.
+ * side. Its outline and collision are built from the model's own boxes; the doors are 18 px wide, 41 px tall and stand
+ * on the 2 px base, their front face 11 px in front of the block centre.
  */
 public class TestExteriorDoorBlock extends PortalDoorBlock {
     /**
@@ -47,40 +49,105 @@ public class TestExteriorDoorBlock extends PortalDoorBlock {
      */
     public static final PortalShape HUDOLIN_DOORWAY = new PortalShape(18.0F / 16.0F, 41.0F / 16.0F, 2.0F / 16.0F, 11.25F / 16.0F);
 
-    private static final VoxelShape BASE = Block.box(-6, 0, -6, 22, 2, 22);
-    /** Side walls with the corner posts, the back wall, and the front frame either side of the doorway. */
-    private static final VoxelShape HULL = Shapes.or(
-            Block.box(-5, 0, -5, -2, 16, 21),
-            Block.box(18, 0, -5, 21, 16, 21),
-            Block.box(-5, 0, 18, 21, 16, 21),
-            Block.box(-5, 0, -5, -1, 16, -2),
-            Block.box(17, 0, -5, 21, 16, -2));
-    /** The shut leaves. "Right" is the right of someone outside looking in, west of a north-facing box. */
-    private static final VoxelShape RIGHT_LEAF = Block.box(-1, 0, -3, 8, 16, -2);
-    private static final VoxelShape LEFT_LEAF = Block.box(8, 0, -3, 17, 16, -2);
-    private static final Map<Direction, VoxelShape> LOWER_OUTLINE = Shapes.rotateHorizontal(Block.box(-6, 0, -6, 22, 16, 22));
-    private static final Map<Direction, VoxelShape> UPPER_OUTLINE = Shapes.rotateHorizontal(Block.box(-6, 0, -6, 22, 36, 22));
-    /** Collision by half (lower first) and door state. */
-    private static final Map<DoorState, Map<Direction, VoxelShape>>[] COLLISION = collisionShapes();
+    /** The model, everything but the doors: base, corner posts, walls and their trim, sign plates, roof, door frame. */
+    private static final VoxelShape BODY = body();
+    private static final VoxelShape RIGHT_SHUT = ModelBox.of(0, -43, -11, 9, 41, 1).shape();
+    private static final VoxelShape LEFT_SHUT = Shapes.or(ModelBox.of(-9, -43, -11, 9, 41, 1).shape(), ModelBox.of(-0.5, -43, -11.5, 1, 41, 1).shape());
+    /**
+     * The shut left leaf's collision while the right one is open, one pixel short of the middle: a player (9.6 px wide)
+     * then just fits through the right half.
+     */
+    private static final VoxelShape LEFT_SHUT_NARROW = ModelBox.of(-9, -43, -11, 8, 41, 1).shape();
+    /** Open leaves lie flat against the side walls, turned about their hinges (see HudolinExteriorModel). */
+    private static final VoxelShape RIGHT_OPEN = ModelBox.of(-9, -43, 0, 9, 41, 1).turned(1, 9, -11).shape();
+    private static final VoxelShape LEFT_OPEN = Shapes.or(ModelBox.of(0, -43, 0, 9, 41, 1).turned(3, -9, -11).shape(),
+            ModelBox.of(8.5, -43, -0.5, 1, 41, 1).turned(3, -9, -11).shape());
+    /** By half (lower first) and door state, then facing. */
+    private static final Map<DoorState, Map<Direction, VoxelShape>>[] OUTLINE = shapes(false);
+    private static final Map<DoorState, Map<Direction, VoxelShape>>[] COLLISION = shapes(true);
 
     public TestExteriorDoorBlock(Properties properties) {
         super(properties);
     }
 
+    /**
+     * A box of the Hudolin model as exported from Blockbench: model pixels, y negative upwards from the ground, x mirrored
+     * when drawn. Kept in those units so the shapes can be checked against the model line by line.
+     */
+    private record ModelBox(double x1, double y1, double z1, double x2, double y2, double z2) {
+        /** {@code addBox(x, y, z, w, h, d)} of a part posed at y = 24 (the ground), {@code y} already including any child offset. */
+        static ModelBox of(double x, double y, double z, double w, double h, double d) {
+            return new ModelBox(x, -(y + h), z, x + w, -y, z + d);
+        }
+
+        /** Turned by {@code quarterTurns} of the part's yRot (+90 degrees each), then moved by the part's x/z offset. */
+        ModelBox turned(int quarterTurns, double ox, double oz) {
+            double[] a = turn(quarterTurns, this.x1, this.z1);
+            double[] b = turn(quarterTurns, this.x2, this.z2);
+            return new ModelBox(Math.min(a[0], b[0]) + ox, this.y1, Math.min(a[1], b[1]) + oz,
+                    Math.max(a[0], b[0]) + ox, this.y2, Math.max(a[1], b[1]) + oz);
+        }
+
+        private static double[] turn(int quarterTurns, double x, double z) {
+            return switch (Math.floorMod(quarterTurns, 4)) {
+                case 0 -> new double[]{x, z};
+                case 1 -> new double[]{z, -x};
+                case 2 -> new double[]{-x, -z};
+                default -> new double[]{-z, x};
+            };
+        }
+
+        /** In block pixels of the lower block of a north-facing box: model x is mirrored, the model is centred on the block. */
+        VoxelShape shape() {
+            return Block.box(8 - this.x2, this.y1, 8 + this.z1, 8 - this.x1, this.y2, 8 + this.z2);
+        }
+    }
+
+    private static VoxelShape body() {
+        List<ModelBox> boxes = new ArrayList<>(List.of(
+                ModelBox.of(-14, -2, -14, 28, 2, 28),
+                ModelBox.of(10, -49, -13, 3, 47, 3),
+                ModelBox.of(-13, -49, -13, 3, 47, 3),
+                ModelBox.of(-13, -49, 10, 3, 47, 3),
+                ModelBox.of(10, -49, 10, 3, 47, 3),
+                ModelBox.of(-11, -48, -14, 22, 4, 4),
+                ModelBox.of(-11, -48, 10, 22, 4, 4),
+                ModelBox.of(-21, -48, -1, 22, 4, 4).turned(1, -13, -10),
+                ModelBox.of(-21, -48, -1, 22, 4, 4).turned(1, 11, -10),
+                ModelBox.of(-12, -50, -12, 24, 2, 24),
+                ModelBox.of(-10, -51, -10, 20, 1, 20),
+                ModelBox.of(-8, -52, -8, 16, 1, 16),
+                ModelBox.of(-10, -43, -12, 1, 41, 1),
+                ModelBox.of(-10, -44, -12, 20, 1, 1),
+                ModelBox.of(9, -43, -12, 1, 41, 1),
+                ModelBox.of(10, -43, -9, 1, 41, 18),
+                ModelBox.of(0, -43, -1, 1, 41, 18).turned(2, -10, 8),
+                ModelBox.of(0, -43, -1, 1, 41, 18).turned(3, 8, 10)));
+        // The door-like trim on the two sides and the back.
+        int[][] trims = {{3, 0, -32}, {2, 32, 0}, {1, 0, 32}};
+        for (int[] t : trims) {
+            boxes.add(ModelBox.of(22, -44, -12, 20, 1, 1).turned(t[0], t[1], t[2]));
+            boxes.add(ModelBox.of(41, -43, -12, 1, 41, 1).turned(t[0], t[1], t[2]));
+            boxes.add(ModelBox.of(31.5, -43, -11.5, 1, 41, 1).turned(t[0], t[1], t[2]));
+            boxes.add(ModelBox.of(22, -43, -12, 1, 41, 1).turned(t[0], t[1], t[2]));
+        }
+        VoxelShape shape = Shapes.empty();
+        for (ModelBox box : boxes) {
+            shape = Shapes.or(shape, box.shape());
+        }
+        return shape.optimize();
+    }
+
     @SuppressWarnings("unchecked")
-    private static Map<DoorState, Map<Direction, VoxelShape>>[] collisionShapes() {
+    private static Map<DoorState, Map<Direction, VoxelShape>>[] shapes(boolean collision) {
         Map<DoorState, Map<Direction, VoxelShape>>[] shapes = new Map[2];
         for (int half = 0; half < 2; half++) {
             shapes[half] = new EnumMap<>(DoorState.class);
             for (DoorState doors : DoorState.values()) {
-                VoxelShape shape = half == 0 ? Shapes.or(BASE, HULL) : HULL;
-                if (!doors.rightOpen()) {
-                    shape = Shapes.or(shape, RIGHT_LEAF);
-                }
-                if (!doors.leftOpen()) {
-                    shape = Shapes.or(shape, LEFT_LEAF);
-                }
-                shapes[half].put(doors, Shapes.rotateHorizontal(shape));
+                VoxelShape left = doors.leftOpen() ? LEFT_OPEN : collision && doors.rightOpen() ? LEFT_SHUT_NARROW : LEFT_SHUT;
+                VoxelShape shape = Shapes.or(BODY, doors.rightOpen() ? RIGHT_OPEN : RIGHT_SHUT, left).optimize();
+                // The upper half's shapes are the same box, seen from one block up.
+                shapes[half].put(doors, Shapes.rotateHorizontal(half == 0 ? shape : shape.move(0.0, -1.0, 0.0)));
             }
         }
         return shapes;
@@ -101,24 +168,30 @@ public class TestExteriorDoorBlock extends PortalDoorBlock {
         return RenderShape.INVISIBLE;
     }
 
+    /** Both halves outline the whole model, so it looks the same whichever half is aimed at. */
     @Override
     protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
-        boolean lower = state.getValue(HALF) == DoubleBlockHalf.LOWER;
-        return (lower ? LOWER_OUTLINE : UPPER_OUTLINE).get(state.getValue(FACING));
+        return shape(OUTLINE, state, level, pos);
     }
 
     @Override
     protected VoxelShape getCollisionShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+        return shape(COLLISION, state, level, pos);
+    }
+
+    private static VoxelShape shape(Map<DoorState, Map<Direction, VoxelShape>>[] shapes, BlockState state, BlockGetter level, BlockPos pos) {
         boolean lower = state.getValue(HALF) == DoubleBlockHalf.LOWER;
         DoorState doors = level.getBlockEntity(lower ? pos : pos.below()) instanceof PortalDoorBlockEntity door ? door.doorState() : DoorState.CLOSED;
-        return COLLISION[lower ? 0 : 1].get(doors).get(state.getValue(FACING));
+        return shapes[lower ? 0 : 1].get(doors).get(state.getValue(FACING));
     }
 
     @Override
     protected void onPlacedServer(ServerLevel level, BlockPos pos, BlockState state, PortalDoorBlockEntity door, @Nullable LivingEntity placer) {
-        TardisRecord record = TardisInteriorManager.get(level.getServer())
-                .create(level, pos, state.getValue(FACING), this.portalShape(state));
+        TardisInteriorManager manager = TardisInteriorManager.get(level.getServer());
+        TardisRecord record = manager.create(level, pos, state.getValue(FACING), this.portalShape(state));
         door.link(record.uuid(), DoorState.CLOSED);
+        // Built now rather than on first opening, so the view through the doors can be streamed before they open.
+        manager.ensureInterior(level.getServer(), record);
         if (placer instanceof Player player) {
             player.sendOverlayMessage(Component.translatable("message.artronindustries.tardis.created", record.id()));
         }
@@ -138,8 +211,10 @@ public class TestExteriorDoorBlock extends PortalDoorBlock {
         if (!(level.getBlockEntity(pos) instanceof PortalDoorBlockEntity door)) {
             return null;
         }
-        TardisRecord record = TardisInteriorManager.get(level.getServer()).create(level, pos, facing, this.portalShape(lower));
+        TardisInteriorManager manager = TardisInteriorManager.get(level.getServer());
+        TardisRecord record = manager.create(level, pos, facing, this.portalShape(lower));
         door.link(record.uuid(), DoorState.CLOSED);
+        manager.ensureInterior(level.getServer(), record);
         return record;
     }
 }

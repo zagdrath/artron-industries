@@ -26,8 +26,8 @@ import net.minecraft.util.Mth;
  * for someone outside looking in.
  */
 public class HudolinExteriorModel extends Model<HudolinExteriorModel.State> {
-    /** How far a fully open leaf has swung in. */
-    private static final float OPEN_ANGLE = 85.0F * Mth.DEG_TO_RAD;
+    /** How far a fully open leaf has swung in: flat against the side wall. */
+    private static final float OPEN_ANGLE = 90.0F * Mth.DEG_TO_RAD;
 
     private final ModelPart rightDoor;
     private final ModelPart leftDoor;
@@ -78,12 +78,13 @@ public class HudolinExteriorModel extends Model<HudolinExteriorModel.State> {
                 .texOffs(97, 51).addBox(-10.0F, -44.0F, -12.0F, 20.0F, 1.0F, 1.0F)
                 .texOffs(5, 140).addBox(9.0F, -43.0F, -12.0F, 1.0F, 41.0F, 1.0F), PartPose.offset(0.0F, 24.0F, 0.0F));
 
-        // Each leaf pivots on its hinge: the back edge of its outer side (x = +/-9, z = -10), so it swings in clear of the frame.
+        // Each leaf pivots on its hinge at the inner back corner of the frame (x = +/-9, z = -11), the front outer corner of
+        // the shut leaf: it stays tucked behind the frame as it swings, and lies flat against the side wall when open.
         root.addOrReplaceChild("door_right", CubeListBuilder.create()
-                .texOffs(130, 76).addBox(-9.0F, -43.0F, -1.0F, 9.0F, 41.0F, 1.0F), PartPose.offset(9.0F, 24.0F, -10.0F));
+                .texOffs(130, 76).addBox(-9.0F, -43.0F, 0.0F, 9.0F, 41.0F, 1.0F), PartPose.offset(9.0F, 24.0F, -11.0F));
         root.addOrReplaceChild("door_left", CubeListBuilder.create()
-                .texOffs(130, 119).addBox(0.0F, -43.0F, -1.0F, 9.0F, 41.0F, 1.0F)
-                .texOffs(10, 140).addBox(8.5F, -43.0F, -1.5F, 1.0F, 41.0F, 1.0F), PartPose.offset(-9.0F, 24.0F, -10.0F));
+                .texOffs(130, 119).addBox(0.0F, -43.0F, 0.0F, 9.0F, 41.0F, 1.0F)
+                .texOffs(10, 140).addBox(8.5F, -43.0F, -0.5F, 1.0F, 41.0F, 1.0F), PartPose.offset(-9.0F, 24.0F, -11.0F));
 
         PartDefinition walls = root.addOrReplaceChild("walls", CubeListBuilder.create()
                 .texOffs(0, 80).addBox(10.0F, -43.0F, -9.0F, 1.0F, 41.0F, 18.0F), PartPose.offset(0.0F, 24.0F, 0.0F));

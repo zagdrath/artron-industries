@@ -127,7 +127,9 @@ public final class PortalWatcher {
         Map<PortalViewKey, TardisRecord> records = new HashMap<>();
         double radius = Config.WATCH_RADIUS.getAsInt();
         for (TardisRecord record : manager.all()) {
-            if (!record.doorOpen() || !record.hasExterior() || !record.interiorGenerated()) {
+            // Shut doors are watched too: the view is then already on the client when they open, instead of the doorway
+            // showing only the backdrop until the first snapshot arrives.
+            if (!record.hasExterior() || !record.interiorGenerated()) {
                 continue;
             }
             for (PortalSide side : PortalSide.values()) {
@@ -210,7 +212,7 @@ public final class PortalWatcher {
         for (PortalSide side : PortalSide.values()) {
             PortalViewKey key = new PortalViewKey(record.uuid(), side);
             WatchedView view = VIEWS.get(key);
-            if (view != null && (deleted || !record.doorOpen() || !view.geometry.equals(geometry(record, side)))) {
+            if (view != null && (deleted || !record.hasExterior() || !view.geometry.equals(geometry(record, side)))) {
                 drop(server, key);
             }
         }

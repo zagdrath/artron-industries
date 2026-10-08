@@ -46,8 +46,11 @@ beds). `TardisInteriorManager` hands out grid cells on a square spiral (`tardis.
 never reuses cells of deleted TARDISes unless `tardis.reuseDeletedCells` is set. The starter room is generated lazily (first
 open or `/artron tardis enter`). The manager owns the authoritative door state; both door block entities mirror it.
 
-**Watching.** Every `boti.watcherScanInterval` ticks, players within `boti.watchRadius` of an open door, in front of it,
-are subscribed to that door's *view* (`PortalViewKey` = TARDIS + the side the viewer stands on). A view:
+**Watching.** Every `boti.watcherScanInterval` ticks, players within `boti.watchRadius` of a door, in front of it, are
+subscribed to that door's *view* (`PortalViewKey` = TARDIS + the side the viewer stands on). Shut doors are watched too
+(interiors are generated when the TARDIS is placed), and the client builds a shut door's mesh ahead, so the far side is
+there the moment the doors open; a doorway whose view has no mesh yet is not drawn at all rather than show its bare
+backdrop. A view:
 
 * holds a `portal_view` chunk ticket (load + simulate) on the far box, released when the last watcher leaves;
 * captures its first snapshot only once those chunks have loaded asynchronously (never generates chunks synchronously);

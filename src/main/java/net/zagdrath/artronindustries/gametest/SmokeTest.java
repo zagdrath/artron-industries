@@ -172,11 +172,12 @@ public final class SmokeTest {
             check(door.getDoorOpenAmount(1.0F) == 1.0F, "open animation did not finish: " + door.getDoorOpenAmount(1.0F));
             TardisInteriorManager.get(server).setDoorOpen(server, this.record, false);
             check(!door.isOpen(), "interior door did not close");
-            check(PortalWatcher.viewCount() == 0, "closing the door did not drop its views");
+            // Views stay while the doors are shut, so the far side is ready the moment they open again.
+            check(PortalWatcher.viewCount() > 0, "closing the door dropped its views");
         });
         this.steps.add(server -> {
             TardisInteriorManager.get(server).setDoorOpen(server, this.record, true);
-            check(PortalWatcher.pinView(server, this.record, PortalSide.EXTERIOR), "could not recreate the view");
+            check(PortalWatcher.pinView(server, this.record, PortalSide.EXTERIOR), "could not pin the view again");
             this.waitFor(() -> PortalWatcher.encodedView(this.key(PortalSide.EXTERIOR)) != null, 600);
         });
         this.steps.add(server -> {
