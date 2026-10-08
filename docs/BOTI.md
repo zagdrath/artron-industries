@@ -31,7 +31,8 @@ Walking into the doorway plane teleports the entity with the same transform; the
 | Type | Role |
 | --- | --- |
 | `PortalShape` | The only definition of a doorway: opening `width` × `height` (blocks), `bottomOffset` (y), `planeOffset` (distance of the doorway plane from the block centre along `FACING`). Rendering, culling, crossing detection and teleporting all call it; nothing else hard-codes doorway numbers. |
-| `PortalEndpoint` | Implemented by a block entity that is one end of a doorway: shape, facing, `getDoorOpenAmount(partialTick)` (0..1), TARDIS id, side, position, level. |
+| `PortalEndpoint` | Implemented by a block entity that is one end of a doorway: shape, facing, `getDoorOpenAmount(partialTick)` (0..1), TARDIS id, side, position, level. `getOpenSpan` (drawn) and `getPassableSpan` (walkable) say which part of the opening is open, as an `OpenSpan` across its width; the defaults derive both from the open amount, double doors open one half at a time. |
+| `DoorState` | The TARDIS's doors: closed → right leaf open → both open → closed, one step per click. Stored on the record and mirrored to both door block entities, which animate each leaf locally. |
 | `PortalEndpoints` | Per-level registry of loaded endpoints (both logical sides). The renderer iterates it, so it is not tied to any block or block entity renderer. |
 | `DoorPairTransform` | Rotation in 90° steps + translation mapping exterior-door space to interior-door space (`apply`, `invert`, yaw, velocity, direction). It glues the two doorway anchors (bottom-centre of each opening) so that walking *into* one doorway is walking *out of* the other. |
 
@@ -138,6 +139,11 @@ camera, which is black), and the server sends the nearest destination chunks ahe
 is normally released and the screen closed in the same packet batch.
 
 Other dimension changes into or out of interiors (commands, death) keep the normal loading screen.
+
+**Doors that open inwards.** A door that swings in behind its doorway plane would be painted over by the far side.
+Its renderer implements `BotiDoorOverlay`; the nearest drawn doorway's own door is submitted again (only the leaves) into
+BOTI's feature frame, in near-side camera space, and drawn inside the stencil after the far side's blocks, so the leaves
+sort against the far side as if they swung into it. The Hudolin exterior (`HudolinExteriorRenderer`) does this.
 
 **Shader packs.** If Iris or Oculus is installed, doorways use the fallback surface (dark shimmer) unless
 `boti.forceWithShaders` is set: shader packs replace the pipelines BOTI relies on. The same fallback is used for

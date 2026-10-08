@@ -35,6 +35,7 @@ import net.zagdrath.artronindustries.boti.PortalViewKey;
 import net.zagdrath.artronindustries.network.BotiArrivalPayload;
 import net.zagdrath.artronindustries.network.BotiCrossingPayload;
 import net.zagdrath.artronindustries.portal.DoorPairTransform;
+import net.zagdrath.artronindustries.portal.OpenSpan;
 import net.zagdrath.artronindustries.portal.PortalShape;
 import net.zagdrath.artronindustries.portal.PortalSide;
 import net.zagdrath.artronindustries.registry.ArtronTickets;
@@ -49,8 +50,6 @@ public final class DoorwayCrossing {
     private static final double TRACK_RANGE = 3.0;
     /** Distance an arriving entity is placed in front of the destination plane, so it cannot immediately re-cross. */
     private static final double ARRIVAL_OFFSET = 0.05;
-    /** Fraction of the open animation after which the doorway lets entities through. */
-    private static final float PASSABLE_OPEN_AMOUNT = 0.5F;
 
     /** Last tracked position per entity, with its dimension: a position from another level says nothing about crossing. */
     private static final Map<UUID, Tracked> LAST_POSITIONS = new HashMap<>();
@@ -80,7 +79,8 @@ public final class DoorwayCrossing {
             for (PortalSide side : PortalSide.values()) {
                 ServerLevel level = TardisInteriorManager.level(server, record, side);
                 PortalDoorBlockEntity door = manager.loadedDoor(server, record, side);
-                if (level == null || door == null || door.getDoorOpenAmount(1.0F) < PASSABLE_OPEN_AMOUNT) {
+                OpenSpan passable = door == null ? OpenSpan.NONE : door.getPassableSpan();
+                if (level == null || passable.isEmpty()) {
                     continue;
                 }
                 BlockPos pos = record.doorPos(side);
@@ -104,7 +104,7 @@ public final class DoorwayCrossing {
                         continue;
                     }
                     Vec3 crossing = before.lerp(now, d0 / (d0 - d1));
-                    if (!passesThroughOpening(shape, pos, facing, entity, crossing)) {
+                    if (!passesThroughOpening(shape, passable, pos, facing, entity, crossing)) {
                         continue;
                     }
                     cross(server, record, side, entity, now);
@@ -115,11 +115,10 @@ public final class DoorwayCrossing {
         COOLDOWN_UNTIL.values().removeIf(until -> until <= ticks);
     }
 
-    private static boolean passesThroughOpening(PortalShape shape, BlockPos pos, Direction facing, Entity entity, Vec3 crossing) {
+    private static boolean passesThroughOpening(PortalShape shape, OpenSpan passable, BlockPos pos, Direction facing, Entity entity, Vec3 crossing) {
         double lateral = shape.lateral(pos, facing, crossing);
         double bottom = pos.getY() + shape.bottomOffset();
-        double halfWidth = shape.width() * 0.5;
-        return Math.abs(lateral) <= halfWidth
+        return lateral >= shape.lateralAt(passable.from()) && lateral <= shape.lateralAt(passable.to())
                 && crossing.y >= bottom - 0.5
                 && crossing.y + Math.min(entity.getBbHeight(), shape.height()) <= bottom + shape.height() + 0.1;
     }

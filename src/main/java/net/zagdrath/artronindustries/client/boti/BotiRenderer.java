@@ -68,6 +68,7 @@ import net.zagdrath.artronindustries.boti.PortalViewKey;
 import net.zagdrath.artronindustries.boti.SnapshotBox;
 import net.zagdrath.artronindustries.client.ArtronClientConfig;
 import net.zagdrath.artronindustries.portal.DoorPairTransform;
+import net.zagdrath.artronindustries.portal.OpenSpan;
 import net.zagdrath.artronindustries.portal.PortalEndpoint;
 import net.zagdrath.artronindustries.portal.PortalEndpoints;
 import net.zagdrath.artronindustries.portal.PortalShape;
@@ -114,6 +115,8 @@ public final class BotiRenderer {
         @Nullable GpuBuffer fog;
         int firstQuad;
         boolean ownsBlockEntities;
+        /** The near-side door this doorway belongs to, when it is a real one. */
+        @Nullable PortalEndpoint endpoint;
 
         DoorDraw(PortalViewKey key, BotiClientCache.@Nullable View view, Vector3f[] corners, double distanceSqr, boolean fallback, boolean debugFloating) {
             this.key = key;
@@ -180,8 +183,8 @@ public final class BotiRenderer {
             if (endpoint.getTardisId() == null) {
                 continue;
             }
-            float open = endpoint.getDoorOpenAmount(partialTick);
-            if (open <= 0.001F) {
+            OpenSpan span = endpoint.getOpenSpan(partialTick);
+            if (span.isEmpty()) {
                 continue;
             }
             PortalShape shape = endpoint.getPortalShape();
@@ -191,7 +194,7 @@ public final class BotiRenderer {
             // Camera in the doorway plane (the doorway quad would be cut by the near plane) or just through it while the
             // server has not moved the player yet: the whole screen shows the far side.
             boolean fullscreen = cameraDistance < FULLSCREEN_IN_FRONT && cameraDistance > -FULLSCREEN_BEHIND
-                    && shape.containsProjected(pos, facing, camera, -0.05) && open >= 0.5F;
+                    && shape.containsProjected(pos, facing, camera, -0.05, span) && !endpoint.getPassableSpan().isEmpty();
             if (cameraDistance <= 0.0 && !fullscreen) {
                 continue; // looking at the back of the doorway
             }
@@ -207,12 +210,13 @@ public final class BotiRenderer {
             Vector3f[] corners = fullscreen ? screenQuad(event.getCamera().forwardVector(), event.getCamera().upVector(),
                     event.getCamera().leftVector()) : new Vector3f[4];
             if (!fullscreen) {
-                Vec3[] world = shape.corners(pos, facing, open);
+                Vec3[] world = shape.corners(pos, facing, span);
                 for (int i = 0; i < 4; i++) {
                     corners[i] = new Vector3f((float) (world[i].x - camera.x), (float) (world[i].y - camera.y), (float) (world[i].z - camera.z));
                 }
             }
             DoorDraw draw = new DoorDraw(key, view, corners, distanceSqr, fallback, false);
+            draw.endpoint = endpoint;
             if (!fallback) {
                 computeView(draw, level, camera);
             }
@@ -420,8 +424,9 @@ public final class BotiRenderer {
     }
 
     /**
-     * Submits the nearest drawn view's block entities and entity stand-ins into BOTI's own feature dispatcher (vanilla's
-     * prepared frame is in use for the main view). They are drawn later inside that view's doorway stencil.
+     * Submits the nearest drawn view's block entities and entity stand-ins, and its own door's leaves if they swing in
+     * behind the doorway ({@link BotiDoorOverlay}), into BOTI's own feature dispatcher (vanilla's prepared frame is in use
+     * for the main view). They are drawn later inside that view's doorway stencil, after the far side's blocks.
      */
     private static void prepareFeatures(List<DoorDraw> draws, LevelRenderState levelState) {
         Minecraft mc = Minecraft.getInstance();
@@ -431,13 +436,15 @@ public final class BotiRenderer {
         DoorDraw owner = null;
         Collection<BlockEntity> blockEntities = List.of();
         Collection<Entity> entities = List.of();
+        @Nullable BlockEntity overlayDoor = null;
         for (DoorDraw draw : draws) {
             if (draw.fallback || draw.view == null || draw.model == null || draw.mesh == null) {
                 continue;
             }
             blockEntities = ArtronClientConfig.RENDER_BLOCK_ENTITIES.getAsBoolean() ? BotiBlockEntities.get(draw.view, mc.level) : List.of();
             entities = BotiEntities.get(draw.key);
-            if (!blockEntities.isEmpty() || !entities.isEmpty()) {
+            overlayDoor = draw.endpoint instanceof BlockEntity be && mc.getBlockEntityRenderDispatcher().getRenderer(be) instanceof BotiDoorOverlay<?> ? be : null;
+            if (!blockEntities.isEmpty() || !entities.isEmpty() || overlayDoor != null) {
                 owner = draw;
                 break;
             }
@@ -493,11 +500,31 @@ public final class BotiRenderer {
             entityDispatcher.submit(state, levelState.cameraRenderState, state.x - box.origin().getX(), state.y - box.origin().getY(),
                     state.z - box.origin().getZ(), poseStack, SUBMITS);
         }
+
+        if (overlayDoor != null) {
+            submitDoorOverlay(overlayDoor, beDispatcher, partialTick, levelState);
+        }
         featureFrame = featureDispatcher.prepareFrame(SUBMITS);
         owner.ownsBlockEntities = true;
         if (++featureLogCounter % 200 == 0) {
             ArtronIndustries.LOGGER.debug("BOTI features for {}: {} block entities, {} entities", owner.key, blockEntities.size(), entities.size());
         }
+    }
+
+    /** The near-side door's own leaves, in near-side camera space like the far side's blocks are drawn. */
+    @SuppressWarnings("unchecked")
+    private static void submitDoorOverlay(BlockEntity door, BlockEntityRenderDispatcher beDispatcher, float partialTick, LevelRenderState levelState) {
+        BlockEntityRenderer<BlockEntity, BlockEntityRenderState> renderer = beDispatcher.getRenderer(door);
+        if (!(renderer instanceof BotiDoorOverlay<?> overlay)) {
+            return;
+        }
+        Vec3 camera = levelState.cameraRenderState.pos;
+        BlockEntityRenderState state = renderer.createRenderState();
+        renderer.extractRenderState(door, state, partialTick, camera, null);
+        BlockPos pos = door.getBlockPos();
+        PoseStack poseStack = new PoseStack();
+        poseStack.translate(pos.getX() - camera.x, pos.getY() - camera.y, pos.getZ() - camera.z);
+        ((BotiDoorOverlay<BlockEntityRenderState>) overlay).submitBehindDoorway(state, poseStack, SUBMITS);
     }
 
     private static int lightAt(PortalSnapshot snapshot, DoorDraw owner, int x, int y, int z) {

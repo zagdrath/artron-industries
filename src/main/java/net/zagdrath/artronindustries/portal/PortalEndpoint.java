@@ -27,6 +27,19 @@ public interface PortalEndpoint {
     /** 0 = closed, 1 = fully open. Interpolated with {@code partialTick} on the client. */
     float getDoorOpenAmount(float partialTick);
 
+    /**
+     * The part of the opening the far side is drawn in. Defaults to the opening uncovered from the left as the door
+     * opens; double doors open one half at a time.
+     */
+    default OpenSpan getOpenSpan(float partialTick) {
+        return new OpenSpan(0.0F, this.getDoorOpenAmount(partialTick));
+    }
+
+    /** The part of the opening entities can walk through. Defaults to all of it once the door is half open. */
+    default OpenSpan getPassableSpan() {
+        return this.getDoorOpenAmount(1.0F) >= 0.5F ? OpenSpan.FULL : OpenSpan.NONE;
+    }
+
     /** The TARDIS this door belongs to, or {@code null} if it is not linked. */
     @Nullable UUID getTardisId();
 

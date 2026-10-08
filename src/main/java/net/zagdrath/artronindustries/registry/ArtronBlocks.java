@@ -16,10 +16,10 @@ import net.zagdrath.artronindustries.block.InteriorDoorBlock;
 import net.zagdrath.artronindustries.block.TestExteriorDoorBlock;
 
 public final class ArtronBlocks {
-    /** PLACEHOLDER: replaced by the real TARDIS exterior. */
+    /** The TARDIS exterior. Its collision follows the doors, so its shape is not cached. */
     public static final DeferredBlock<TestExteriorDoorBlock> TEST_EXTERIOR_DOOR = ArtronIndustries.BLOCKS.registerBlock(
             "test_exterior_door", TestExteriorDoorBlock::new,
-            p -> p.mapColor(MapColor.COLOR_BLUE).strength(3.0F, 1200.0F).sound(SoundType.METAL).noOcclusion().pushReaction(PushReaction.IMMOVEABLE));
+            p -> p.mapColor(MapColor.COLOR_BLUE).strength(3.0F, 1200.0F).sound(SoundType.METAL).noOcclusion().dynamicShape().pushReaction(PushReaction.IMMOVEABLE));
     /** PLACEHOLDER interior door. */
     public static final DeferredBlock<InteriorDoorBlock> INTERIOR_DOOR = ArtronIndustries.BLOCKS.registerBlock(
             "interior_door", InteriorDoorBlock::new,

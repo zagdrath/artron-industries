@@ -1,34 +1,28 @@
 {
   "variants": {
     "facing=north,half=lower": {
-      "model": "artronindustries:block/test_exterior_door_lower"
-    },
-    "facing=east,half=lower": {
-      "model": "artronindustries:block/test_exterior_door_lower",
-      "y": 90
-    },
-    "facing=south,half=lower": {
-      "model": "artronindustries:block/test_exterior_door_lower",
-      "y": 180
-    },
-    "facing=west,half=lower": {
-      "model": "artronindustries:block/test_exterior_door_lower",
-      "y": 270
+      "model": "artronindustries:block/hudolin_exterior"
     },
     "facing=north,half=upper": {
-      "model": "artronindustries:block/test_exterior_door_upper"
+      "model": "artronindustries:block/hudolin_exterior"
+    },
+    "facing=east,half=lower": {
+      "model": "artronindustries:block/hudolin_exterior"
     },
     "facing=east,half=upper": {
-      "model": "artronindustries:block/test_exterior_door_upper",
-      "y": 90
+      "model": "artronindustries:block/hudolin_exterior"
+    },
+    "facing=south,half=lower": {
+      "model": "artronindustries:block/hudolin_exterior"
     },
     "facing=south,half=upper": {
-      "model": "artronindustries:block/test_exterior_door_upper",
-      "y": 180
+      "model": "artronindustries:block/hudolin_exterior"
+    },
+    "facing=west,half=lower": {
+      "model": "artronindustries:block/hudolin_exterior"
     },
     "facing=west,half=upper": {
-      "model": "artronindustries:block/test_exterior_door_upper",
-      "y": 270
+      "model": "artronindustries:block/hudolin_exterior"
     }
   }
 }

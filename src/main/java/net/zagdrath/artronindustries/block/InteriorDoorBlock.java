@@ -16,6 +16,7 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.zagdrath.artronindustries.block.entity.PortalDoorBlockEntity;
 import net.zagdrath.artronindustries.registry.ArtronBlockEntities;
+import net.zagdrath.artronindustries.tardis.DoorState;
 import net.zagdrath.artronindustries.tardis.TardisInteriorManager;
 import net.zagdrath.artronindustries.tardis.TardisRecord;
 
@@ -48,8 +49,8 @@ public class InteriorDoorBlock extends PortalDoorBlock {
         manager.setDoorOpen(level.getServer(), record, false);
         manager.linkInteriorDoor(level.getServer(), record, pos, state.getValue(FACING), this.portalShape(state));
         if (old != null && old != door) {
-            old.link(null, false);
+            old.link(null, DoorState.CLOSED);
         }
-        door.link(record.uuid(), false);
+        door.link(record.uuid(), DoorState.CLOSED);
     }
 }

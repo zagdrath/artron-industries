@@ -139,7 +139,7 @@ public final class TardisInteriorManager extends SavedData {
         for (PortalSide side : PortalSide.values()) {
             PortalDoorBlockEntity door = this.loadedDoor(server, record, side);
             if (door != null) {
-                door.link(null, false);
+                door.link(null, DoorState.CLOSED);
             }
         }
         this.byUuid.remove(record.uuid);
@@ -165,19 +165,24 @@ public final class TardisInteriorManager extends SavedData {
         return true;
     }
 
+    /** Opens both doors, or shuts them. */
     public void setDoorOpen(MinecraftServer server, TardisRecord record, boolean open) {
-        if (open && (!record.hasExterior() || !this.ensureInterior(server, record))) {
+        this.setDoorState(server, record, open ? DoorState.BOTH_OPEN : DoorState.CLOSED);
+    }
+
+    public void setDoorState(MinecraftServer server, TardisRecord record, DoorState state) {
+        if (state.isOpen() && (!record.hasExterior() || !this.ensureInterior(server, record))) {
             return;
         }
-        if (record.doorOpen == open) {
+        if (record.doorState == state) {
             return;
         }
-        record.doorOpen = open;
+        record.doorState = state;
         this.setDirty();
         for (PortalSide side : PortalSide.values()) {
             PortalDoorBlockEntity door = this.loadedDoor(server, record, side);
             if (door != null) {
-                door.setOpenFromManager(open);
+                door.setDoorStateFromManager(state);
             }
         }
         notifyChanged(server, record, false);

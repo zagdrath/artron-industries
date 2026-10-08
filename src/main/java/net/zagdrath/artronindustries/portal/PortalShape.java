@@ -93,22 +93,31 @@ public record PortalShape(float width, float height, float bottomOffset, float p
      * Whether {@code point} projects onto the opening, shrunk by {@code margin} on every side (a negative margin grows it).
      */
     public boolean containsProjected(BlockPos pos, Direction facing, Vec3 point, double margin) {
+        return this.containsProjected(pos, facing, point, margin, OpenSpan.FULL);
+    }
+
+    /** Whether {@code point} projects onto the {@code span} part of the opening, shrunk by {@code margin} on every side. */
+    public boolean containsProjected(BlockPos pos, Direction facing, Vec3 point, double margin, OpenSpan span) {
         double lat = this.lateral(pos, facing, point);
         double up = point.y - (pos.getY() + this.bottomOffset);
-        double halfWidth = this.width * 0.5 - margin;
-        return lat >= -halfWidth && lat <= halfWidth && up >= margin && up <= this.height - margin;
+        return lat >= this.lateralAt(span.from()) + margin && lat <= this.lateralAt(span.to()) - margin
+                && up >= margin && up <= this.height - margin;
+    }
+
+    /** Lateral offset (see {@link #lateral}) of the point {@code fraction} of the width from the viewer's left edge. */
+    public double lateralAt(float fraction) {
+        return this.width * (fraction - 0.5);
     }
 
     /**
-     * The four corners of the visible opening, counter-clockwise as seen from the viewer side (bottom-left, bottom-right,
-     * top-right, top-left). {@code openAmount} clips the opening horizontally from the hinge (left) side.
+     * The four corners of the {@code span} part of the opening, counter-clockwise as seen from the viewer side (bottom-left,
+     * bottom-right, top-right, top-left).
      */
-    public Vec3[] corners(BlockPos pos, Direction facing, float openAmount) {
+    public Vec3[] corners(BlockPos pos, Direction facing, OpenSpan span) {
         Vec3 a = this.anchor(pos, facing);
         Direction r = right(facing);
-        double half = this.width * 0.5;
-        double left = -half;
-        double right = -half + this.width * Math.clamp(openAmount, 0.0F, 1.0F);
+        double left = this.lateralAt(span.from());
+        double right = this.lateralAt(span.to());
         Vec3 l = new Vec3(r.getStepX() * left, 0.0, r.getStepZ() * left);
         Vec3 rr = new Vec3(r.getStepX() * right, 0.0, r.getStepZ() * right);
         Vec3 up = new Vec3(0.0, this.height, 0.0);
@@ -119,7 +128,7 @@ public record PortalShape(float width, float height, float bottomOffset, float p
 
     /** World-space bounds of the full opening, inflated by {@code inflate}. Used for culling and crossing checks. */
     public AABB bounds(BlockPos pos, Direction facing, double inflate) {
-        Vec3[] c = this.corners(pos, facing, 1.0F);
+        Vec3[] c = this.corners(pos, facing, OpenSpan.FULL);
         return new AABB(c[0], c[2]).inflate(inflate);
     }
 }

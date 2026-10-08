@@ -34,37 +34,57 @@ import net.zagdrath.artronindustries.portal.PortalEndpoint;
 import net.zagdrath.artronindustries.portal.PortalEndpoints;
 import net.zagdrath.artronindustries.portal.PortalShape;
 import net.zagdrath.artronindustries.portal.PortalSide;
+import net.zagdrath.artronindustries.tardis.DoorState;
 import net.zagdrath.artronindustries.tardis.TardisInteriorManager;
 import net.zagdrath.artronindustries.tardis.TardisRecord;
 
 /**
  * PLACEHOLDER door block entity shared by {@code test_exterior_door} and {@code interior_door}. Holds the TARDIS link and
- * a locally animated open amount mirroring the authoritative state in {@link TardisInteriorManager}.
+ * the {@link DoorState} mirroring the authoritative one in {@link TardisInteriorManager}, with each door leaf animated
+ * locally. Single doors open with the right leaf.
  */
 public abstract class PortalDoorBlockEntity extends BlockEntity implements PortalEndpoint {
     /** Ticks a full open or close animation takes. */
     public static final int OPEN_TICKS = 10;
 
     private @Nullable UUID tardisId;
-    private boolean open;
-    private int openTicks;
-    private int prevOpenTicks;
+    private DoorState doorState = DoorState.CLOSED;
+    private final Leaf right = new Leaf();
+    private final Leaf left = new Leaf();
     private boolean animationPrimed;
+
+    /** Open animation of one door leaf, in ticks. */
+    private static final class Leaf {
+        int ticks;
+        int prevTicks;
+
+        void tick(boolean open) {
+            this.prevTicks = this.ticks;
+            this.ticks = Mth.clamp(this.ticks + (open ? 1 : -1), 0, OPEN_TICKS);
+        }
+
+        void snap(boolean open) {
+            this.ticks = this.prevTicks = open ? OPEN_TICKS : 0;
+        }
+
+        float amount(float partialTick) {
+            return Mth.lerp(partialTick, this.prevTicks, this.ticks) / OPEN_TICKS;
+        }
+    }
 
     protected PortalDoorBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
     }
 
     public void tick() {
-        this.prevOpenTicks = this.openTicks;
-        if (this.open && this.openTicks < OPEN_TICKS) {
-            this.openTicks++;
-        } else if (!this.open && this.openTicks > 0) {
-            this.openTicks--;
-        }
+        this.right.tick(this.doorState.rightOpen());
+        this.left.tick(this.doorState.leftOpen());
     }
 
-    /** Toggles the TARDIS door. Returns a message explaining why nothing happened, or {@code null} on success. */
+    /**
+     * Moves the TARDIS doors on to their next state (right leaf, both, shut). Returns a message explaining why nothing
+     * happened, or {@code null} on success.
+     */
     public @Nullable Component toggle(ServerLevel level) {
         TardisInteriorManager manager = TardisInteriorManager.get(level.getServer());
         TardisRecord record = manager.get(this.tardisId);
@@ -74,31 +94,46 @@ public abstract class PortalDoorBlockEntity extends BlockEntity implements Porta
         if (!record.hasExterior()) {
             return Component.translatable("message.artronindustries.door.no_exterior");
         }
-        manager.setDoorOpen(level.getServer(), record, !record.doorOpen());
+        manager.setDoorState(level.getServer(), record, record.doorState().next());
         return null;
     }
 
     /** Links this door to a TARDIS. Server only. */
-    public void link(@Nullable UUID tardis, boolean open) {
+    public void link(@Nullable UUID tardis, DoorState state) {
         this.tardisId = tardis;
-        this.setOpenFromManager(open);
+        this.setDoorStateFromManager(state);
         this.sync();
     }
 
-    /** Applies the authoritative open state. Server only; synced to clients which animate locally. */
-    public void setOpenFromManager(boolean open) {
-        if (this.open == open) {
+    /** Applies the authoritative door state. Server only; synced to clients which animate locally. */
+    public void setDoorStateFromManager(DoorState state) {
+        if (this.doorState == state) {
             return;
         }
-        this.open = open;
+        boolean opening = state.ordinal() > this.doorState.ordinal();
+        this.doorState = state;
         if (this.level != null) {
-            this.level.playSound(null, this.worldPosition, open ? SoundEvents.IRON_DOOR_OPEN : SoundEvents.IRON_DOOR_CLOSE, SoundSource.BLOCKS, 1.0F, 1.0F);
+            this.level.playSound(null, this.worldPosition, opening ? SoundEvents.IRON_DOOR_OPEN : SoundEvents.IRON_DOOR_CLOSE, SoundSource.BLOCKS, 1.0F, 1.0F);
         }
         this.sync();
     }
 
     public boolean isOpen() {
-        return this.open;
+        return this.doorState.isOpen();
+    }
+
+    public DoorState doorState() {
+        return this.doorState;
+    }
+
+    /** 0 = shut, 1 = fully open, for the {@code left} or right leaf. Interpolated with {@code partialTick} on the client. */
+    public float getLeafOpenAmount(boolean left, float partialTick) {
+        return (left ? this.left : this.right).amount(partialTick);
+    }
+
+    private void snapAnimation() {
+        this.right.snap(this.doorState.rightOpen());
+        this.left.snap(this.doorState.leftOpen());
     }
 
     private void sync() {
@@ -121,11 +156,12 @@ public abstract class PortalDoorBlockEntity extends BlockEntity implements Porta
             TardisRecord record = TardisInteriorManager.get(serverLevel.getServer()).get(this.tardisId);
             if (record == null || !this.worldPosition.equals(record.doorPos(this.getPortalSide()))) {
                 this.tardisId = null;
-                this.open = false;
+                this.doorState = DoorState.CLOSED;
             } else {
-                this.open = record.doorOpen();
+                this.doorState = record.doorState();
+                this.reconcile(serverLevel, TardisInteriorManager.get(serverLevel.getServer()), record);
             }
-            this.openTicks = this.prevOpenTicks = this.open ? OPEN_TICKS : 0;
+            this.snapAnimation();
         }
     }
 
@@ -159,15 +195,21 @@ public abstract class PortalDoorBlockEntity extends BlockEntity implements Porta
 
     protected abstract void onDoorRemoved(ServerLevel level, TardisInteriorManager manager, TardisRecord record);
 
+    /** Called on load for a door that is still linked, to bring the record up to date with this door. */
+    protected void reconcile(ServerLevel level, TardisInteriorManager manager, TardisRecord record) {
+    }
+
     @Override
     protected void loadAdditional(ValueInput input) {
         super.loadAdditional(input);
         this.tardisId = input.read("tardis", UUIDUtil.CODEC).orElse(null);
-        this.open = input.getBooleanOr("open", false);
+        // "open" is what older saves have; "door_state" replaces it.
+        this.doorState = input.read("door_state", DoorState.CODEC)
+                .orElse(input.getBooleanOr("open", false) ? DoorState.BOTH_OPEN : DoorState.CLOSED);
         if (!this.animationPrimed) {
             // First load (world load or chunk arriving on the client): show the current state without animating.
             this.animationPrimed = true;
-            this.openTicks = this.prevOpenTicks = this.open ? OPEN_TICKS : 0;
+            this.snapAnimation();
         }
     }
 
@@ -175,7 +217,7 @@ public abstract class PortalDoorBlockEntity extends BlockEntity implements Porta
     protected void saveAdditional(ValueOutput output) {
         super.saveAdditional(output);
         output.storeNullable("tardis", UUIDUtil.CODEC, this.tardisId);
-        output.putBoolean("open", this.open);
+        output.store("door_state", DoorState.CODEC, this.doorState);
     }
 
     @Override
@@ -203,7 +245,7 @@ public abstract class PortalDoorBlockEntity extends BlockEntity implements Porta
 
     @Override
     public float getDoorOpenAmount(float partialTick) {
-        return Mth.lerp(partialTick, this.prevOpenTicks, this.openTicks) / OPEN_TICKS;
+        return this.right.amount(partialTick);
     }
 
     @Override

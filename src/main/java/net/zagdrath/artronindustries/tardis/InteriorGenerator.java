@@ -112,7 +112,7 @@ public final class InteriorGenerator {
         set(level, door.relative(facing.getOpposite()), walls);
         set(level, door.above().relative(facing.getOpposite()), walls);
         if (level.getBlockEntity(door) instanceof PortalDoorBlockEntity be) {
-            be.link(record.uuid(), record.doorOpen());
+            be.link(record.uuid(), record.doorState());
         }
     }
 

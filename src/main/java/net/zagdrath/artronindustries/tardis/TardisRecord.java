@@ -37,7 +37,9 @@ public final class TardisRecord {
             BlockPos.CODEC.optionalFieldOf("exterior_door").forGetter(r -> Optional.ofNullable(r.exteriorDoorPos)),
             Direction.CODEC.optionalFieldOf("exterior_facing", Direction.NORTH).forGetter(r -> r.exteriorFacing),
             PortalShape.CODEC.optionalFieldOf("exterior_shape", PortalShape.DEFAULT_DOOR).forGetter(r -> r.exteriorShape),
-            Codec.BOOL.optionalFieldOf("door_open", false).forGetter(r -> r.doorOpen)
+            // door_open is what older saves have; door_state replaces it.
+            Codec.BOOL.optionalFieldOf("door_open", false).forGetter(r -> r.doorState.isOpen()),
+            DoorState.CODEC.optionalFieldOf("door_state").forGetter(r -> Optional.of(r.doorState))
     ).apply(i, TardisRecord::new));
 
     final UUID uuid;
@@ -52,11 +54,12 @@ public final class TardisRecord {
     @Nullable BlockPos exteriorDoorPos;
     Direction exteriorFacing;
     PortalShape exteriorShape;
-    boolean doorOpen;
+    DoorState doorState;
 
     private TardisRecord(UUID uuid, int id, int cellIndex, BlockPos interiorOrigin, BlockPos interiorDoorPos, Direction interiorDoorFacing,
                          PortalShape interiorShape, boolean interiorGenerated, Optional<ResourceKey<Level>> exteriorLevel,
-                         Optional<BlockPos> exteriorDoorPos, Direction exteriorFacing, PortalShape exteriorShape, boolean doorOpen) {
+                         Optional<BlockPos> exteriorDoorPos, Direction exteriorFacing, PortalShape exteriorShape, boolean doorOpen,
+                         Optional<DoorState> doorState) {
         this.uuid = uuid;
         this.id = id;
         this.cellIndex = cellIndex;
@@ -69,12 +72,12 @@ public final class TardisRecord {
         this.exteriorDoorPos = exteriorDoorPos.orElse(null);
         this.exteriorFacing = exteriorFacing;
         this.exteriorShape = exteriorShape;
-        this.doorOpen = doorOpen;
+        this.doorState = doorState.orElse(doorOpen ? DoorState.BOTH_OPEN : DoorState.CLOSED);
     }
 
     TardisRecord(UUID uuid, int id, int cellIndex, BlockPos interiorOrigin, BlockPos interiorDoorPos, Direction interiorDoorFacing) {
         this(uuid, id, cellIndex, interiorOrigin, interiorDoorPos, interiorDoorFacing, PortalShape.DEFAULT_DOOR, false,
-                Optional.empty(), Optional.empty(), Direction.NORTH, PortalShape.DEFAULT_DOOR, false);
+                Optional.empty(), Optional.empty(), Direction.NORTH, PortalShape.DEFAULT_DOOR, false, Optional.empty());
     }
 
     public UUID uuid() {
@@ -126,8 +129,13 @@ public final class TardisRecord {
         return this.exteriorShape;
     }
 
+    /** Whether either door leaf is open. */
     public boolean doorOpen() {
-        return this.doorOpen;
+        return this.doorState.isOpen();
+    }
+
+    public DoorState doorState() {
+        return this.doorState;
     }
 
     public boolean hasExterior() {
