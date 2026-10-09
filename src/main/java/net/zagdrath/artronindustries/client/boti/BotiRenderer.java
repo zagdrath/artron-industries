@@ -55,6 +55,7 @@ import net.minecraft.util.LightCoordsUtil;
 import net.minecraft.util.context.ContextKey;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -143,6 +144,11 @@ public final class BotiRenderer {
         @Nullable Vector3f skirtLocalCamera;
         @Nullable BotiMesh skirt;
         int[] skirtSections = new int[0];
+        /**
+         * Looking out: where render-distance fog ends, from the camera (see BotiFog#renderDistanceEnd), for the blocks,
+         * the skirt and the sky alike.
+         */
+        float fogEnd = 1.0E6F;
         /** Fog uniform for everything drawn inside this doorway (fades the far side into its own fog colour). */
         @Nullable GpuBuffer fog;
         int firstQuad;
@@ -212,6 +218,7 @@ public final class BotiRenderer {
         ClientLevel level = event.getLevel();
         Vec3 camera = event.getCamera().position();
         float partialTick = event.getDeltaTracker().getGameTimeDeltaPartialTick(false);
+        Vec3 forward = new Vec3(event.getCamera().forwardVector());
         boolean fallback = usesFallback();
         double maxDistance = ArtronClientConfig.RENDER_DISTANCE.getAsInt();
         Frustum frustum = new Frustum(event.getFrustum());
@@ -225,7 +232,7 @@ public final class BotiRenderer {
             OpenSpan span = endpoint.getOpenSpan(partialTick);
             if (span.isEmpty()) {
                 if (!fallback) {
-                    warm(endpoint, level, camera, maxDistance, draws);
+                    warm(endpoint, level, camera, forward, partialTick, maxDistance, draws);
                 }
                 continue;
             }
@@ -263,7 +270,7 @@ public final class BotiRenderer {
             draw.nearCamera = camera;
             draw.throughOpening = !fullscreen;
             if (!fallback) {
-                computeView(draw, level, camera);
+                computeView(draw, level, camera, forward, partialTick);
             }
             draws.add(draw);
         }
@@ -310,7 +317,8 @@ public final class BotiRenderer {
      * A shut door in front of the camera whose view the server already streams: build that view's mesh now, so the far
      * side is there the moment the doors start to open.
      */
-    private static void warm(PortalEndpoint endpoint, ClientLevel level, Vec3 camera, double maxDistance, List<DoorDraw> draws) {
+    private static void warm(PortalEndpoint endpoint, ClientLevel level, Vec3 camera, Vec3 forward, float partialTick, double maxDistance,
+                             List<DoorDraw> draws) {
         PortalShape shape = endpoint.getPortalShape();
         BlockPos pos = endpoint.getPortalPos();
         Direction facing = endpoint.getFacing();
@@ -325,7 +333,7 @@ public final class BotiRenderer {
         }
         DoorDraw draw = new DoorDraw(key, view, new Vector3f[0], distanceSqr, false, false);
         draw.warmOnly = true;
-        computeView(draw, level, camera);
+        computeView(draw, level, camera, forward, partialTick);
         draws.add(draw);
     }
 
@@ -341,26 +349,31 @@ public final class BotiRenderer {
                 new Vector3f(center).add(l).add(u)};
     }
 
-    /** Fills in the far -> near transform, sorting origin and backdrop for a door with a cached view. */
-    private static void computeView(DoorDraw draw, ClientLevel level, Vec3 camera) {
+    /**
+     * Fills in the far -> near transform, sorting origin and backdrop for a door with a cached view. Looking out, the
+     * backdrop is the far side's final fog colour, flat, as vanilla clears the screen to it: the skirt and the sky's rim
+     * fade into that same colour, so the horizon between them does not show.
+     */
+    private static void computeView(DoorDraw draw, ClientLevel level, Vec3 camera, Vec3 forward, float partialTick) {
         boolean interiorBeyond = draw.key.nearSide() == PortalSide.EXTERIOR;
         PortalEnvironment env = draw.view != null ? draw.view.snapshot().environment() : null;
-        if (interiorBeyond || env == null) {
+        if (interiorBeyond || env == null || draw.view == null) {
             int c = ArtronClientConfig.INTERIOR_BACKDROP_COLOR.getAsInt();
             draw.backdropTop = 0xFF000000 | c;
             draw.backdropBottom = 0xFF000000 | c;
-        } else {
-            float darken = 1.0F - env.rain() * 0.25F - env.thunder() * 0.25F;
-            draw.backdropTop = 0xFF000000 | scale(env.hasSky() ? env.skyColor() : env.fogColor(), darken);
-            draw.backdropBottom = 0xFF000000 | scale(env.fogColor(), darken);
-        }
-        if (draw.view == null) {
-            return;
+            if (draw.view == null) {
+                return;
+            }
         }
         PortalSnapshot snapshot = draw.view.snapshot();
         PortalGeometry geometry = snapshot.geometry();
         DoorPairTransform nearToFar = geometry.nearToFar();
         DoorPairTransform farToNear = nearToFar.invert();
+        if (!interiorBeyond && env != null) {
+            int fog = 0xFF000000 | BotiFog.color(env, nearToFar.applyVelocity(forward), partialTick);
+            draw.backdropTop = fog;
+            draw.backdropBottom = fog;
+        }
         SnapshotBox box = snapshot.box();
         Vec3 origin = Vec3.atLowerCornerOf(box.origin());
         draw.model = boxToCameraRelative(farToNear, origin, camera);
@@ -375,17 +388,24 @@ public final class BotiRenderer {
             draw.skirtModel = boxToCameraRelative(farToNear, skirtOrigin, camera);
             draw.skirtClip = skirt.clipPlane(geometry.farPos(), geometry.farFacing(), geometry.farShape());
             draw.skirtLocalCamera = draw.farCamera.subtract(skirtOrigin).toVector3f();
+            Vec3 door = geometry.farShape().anchor(geometry.farPos(), geometry.farFacing());
+            draw.fogEnd = BotiFog.renderDistanceEnd(Math.hypot(draw.farCamera.x - door.x, draw.farCamera.z - door.z));
         }
+    }
+
+    /** How far the ground skirt reaches from the far door: the viewer's render distance, at most {@link #MAX_SKIRT_RADIUS}. */
+    static int skirtRadius() {
+        return Math.min(Minecraft.getInstance().options.getEffectiveRenderDistance() * 16, MAX_SKIRT_RADIUS);
     }
 
     /**
      * The box the ground skirt fills, looking out of a TARDIS: in front of the far doorway like the snapshot's (and level
-     * with it), reaching the viewer's render distance (where vanilla's fog ends), at most {@link #MAX_SKIRT_RADIUS}.
+     * with it), {@link #skirtRadius()} deep and twice that wide, so it holds everything that far from the door.
      */
     static SnapshotBox skirtBox(PortalSnapshot snapshot) {
         PortalGeometry geometry = snapshot.geometry();
         SnapshotBox box = snapshot.box();
-        int radius = Math.min(Minecraft.getInstance().options.getEffectiveRenderDistance() * 16, MAX_SKIRT_RADIUS);
+        int radius = skirtRadius();
         int across = Math.max(box.sizeX(), box.sizeZ());
         return SnapshotBox.inFrontOf(geometry.farPos(), geometry.farFacing(), geometry.farShape(), Math.max(2 * radius, across + 2), box.sizeY(),
                 Math.max(radius, across));
@@ -414,13 +434,6 @@ public final class BotiRenderer {
         double sun = Math.cos((dayFraction - 0.25) * Math.PI * 2.0);
         double daylight = Math.clamp(sun * 2.0 + 0.5, 0.25, 1.0) * (1.0 - env.rain() * 0.3);
         return Math.round(daylight * 16.0) / 16.0F;
-    }
-
-    private static int scale(int rgb, float factor) {
-        int r = Math.round(((rgb >> 16) & 0xFF) * factor);
-        int g = Math.round(((rgb >> 8) & 0xFF) * factor);
-        int b = Math.round((rgb & 0xFF) * factor);
-        return Math.clamp(r, 0, 255) << 16 | Math.clamp(g, 0, 255) << 8 | Math.clamp(b, 0, 255);
     }
 
     // --- Prepare (uploads; no render pass open) ------------------------------------------------------------------------
@@ -515,11 +528,11 @@ public final class BotiRenderer {
         float distanceStart = 1.0E6F;
         float distanceEnd = 1.0E6F;
         if (draw.key.nearSide() == PortalSide.INTERIOR && !draw.debugFloating && !draw.arrival) {
-            envStart = env.fogStart() - 160.0F * env.rain();
-            envEnd = Math.max(Math.min(96.0F, env.fogEnd()), env.fogEnd() - 256.0F * env.rain());
-            float renderDistance = Math.min(Minecraft.getInstance().options.getEffectiveRenderDistance() * 16, MAX_SKIRT_RADIUS);
-            distanceStart = renderDistance - Mth.clamp(renderDistance / 10.0F, 4.0F, 64.0F);
-            distanceEnd = renderDistance;
+            float rainFog = rainFogMultiplier(draw);
+            envStart = env.fogStart() - 160.0F * rainFog;
+            envEnd = Math.max(Math.min(96.0F, env.fogEnd()), env.fogEnd() - 256.0F * rainFog);
+            distanceEnd = draw.fogEnd;
+            distanceStart = BotiFog.renderDistanceStart(distanceEnd);
         }
         int c = draw.backdropBottom;
         try (MemoryStack stack = MemoryStack.stackPush()) {
@@ -534,6 +547,20 @@ public final class BotiRenderer {
                     .get();
             return RenderSystem.getDevice().createBuffer(() -> "BOTI fog", GpuBuffer.USAGE_UNIFORM, data);
         }
+    }
+
+    /** Vanilla's rain fog strength at the far camera (see BotiFog#rainFogMultiplier), lit as the box position nearest it. */
+    private static float rainFogMultiplier(DoorDraw draw) {
+        PortalSnapshot snapshot = draw.view.snapshot();
+        PortalEnvironment env = snapshot.environment();
+        Minecraft mc = Minecraft.getInstance();
+        if (env.rain() <= 0.0F || draw.farCamera == null || mc.level == null) {
+            return 0.0F;
+        }
+        BlockPos at = BlockPos.containing(draw.farCamera);
+        int skyLight = PortalSnapshot.skyLight(snapshot.light()[snapshot.box().clampedIndexOfWorld(at.getX(), at.getY(), at.getZ())]);
+        Biome biome = SnapshotBlockGetter.biomeRegistry(mc.level).byId(env.biomeId());
+        return BotiFog.rainFogMultiplier(env, skyLight, biome == null || biome.hasPrecipitation());
     }
 
     /**

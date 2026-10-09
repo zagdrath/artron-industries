@@ -120,7 +120,7 @@ uploads to happen before passes open, so the work is split:
 3. `AfterOpaqueFeatures`, per door:
    1. **mark** — doorway quad into the stencil bit, depth-tested, no colour/depth writes;
    2. **backdrop** — inside the bit: quad forced to the far plane (reverse-Z, clip z = 0) with depth test ALWAYS, which
-      clears depth inside the doorway and paints the backdrop (interior colour, or the far side's sky → fog gradient);
+      clears depth inside the doorway and paints the backdrop (interior colour, or the far side's final fog colour, flat, as vanilla clears to it);
    3. **far side** — the block mesh with BOTI's stencil-tested block pipelines (the door transform is passed in the
       otherwise unused `TextureMat` slot so fog is computed in the viewer's space), then block entities and entities
       under the `artronindustries:inside_doorway` **pipeline modifier** (NeoForge's `PipelineModifier`: every vanilla
@@ -145,9 +145,13 @@ snapshot gets the ground of the nearest edge column (its blocks up to the same h
 ground, so a tree at the edge is not drawn out into a wall), meshed with the vanilla renderers like the snapshot itself
 (tint, water and light included), with the sides of steps between columns down to the lowest neighbour. It is built off
 the render thread (about 0.1 s) for each new snapshot or render distance, in 64-block sections that are culled like the
-snapshot's, and drawn with it (opaque layers of both, then the skirt's water, then the box's). The far side is fogged as
-vanilla fogs it: the far side's own environmental fog distances (pulled in by rain the same way) and the viewer's
-render-distance fog, which the skirt reaches, so terrain meets the horizon as it does outside.
+snapshot's, and drawn with it (opaque layers of both, then the skirt's water, then the box's). Outside the box, light is
+read from the nearest box position, so the box's edge row is not smooth-lit against darkness. The far side is fogged as
+vanilla fogs it (`BotiFog`): the far side's own environmental fog distances (pulled in by rain the same way) and
+render-distance fog, ending inside the skirt (the viewer's render distance, less the camera's distance from the door,
+so the skirt always reaches past it), in vanilla's final fog colour for a camera there (the fog colour tinted towards
+the sunrise when facing the sun and blended towards the sky colour by render distance). The backdrop and the sky's fog
+use that same colour and distance, so terrain and the sky's rim meet the horizon as they do outside.
 
 **Seamless walk-through** (`SeamlessTransition`). The server announces a crossing (`BotiCrossingPayload`) just before
 moving the player. For that transition only, NeoForge's `RegisterDimensionTransitionScreenEvent` supplies a loading screen
@@ -184,7 +188,7 @@ cloud height, game time) into `PortalEnvironment.Sky`, refreshed with the rest o
 moon and stars keep moving at the rate seen between the last two samples and the clouds drift with the far game time.
 Vanilla's sky renderer is borrowed (the interior has no sky; three of its private draw methods are opened by access
 transformer, as `SkyRenderer#render` opens its own pass); the clouds have their own `CloudRenderer`, prepared before the
-frame. Sky and clouds fade into the far side's fog colour like vanilla's. Off with `boti.renderSky`.
+frame. Sky and clouds fade into the doorway's fog colour like vanilla's. Off with `boti.renderSky`.
 
 **Shader packs.** If Iris or Oculus is installed, doorways use the fallback surface (dark shimmer) unless
 `boti.forceWithShaders` is set: shader packs replace the pipelines BOTI relies on. The same fallback is used for
@@ -351,7 +355,7 @@ draw recording 0.02–0.07 ms of CPU per frame for 1–2 doorways.
 * Stand-in entities are attached to the client level for their renderers but positioned in far-side coordinates;
   renderers that query the level around themselves (rare) see the near side. Name tags face the near-side camera.
 * Weather particles are not drawn through doorways. The outside's sky is drawn through one doorway per frame (the
-  nearest looking out); others show the sky → fog gradient backdrop. End and Nether skyboxes are not drawn.
+  nearest looking out); others show the flat fog-colour backdrop. End and Nether skyboxes are not drawn.
 * Terrain beyond the streamed box (`exteriorSnapshot*`) is made up from its edge (the ground skirt): hills, buildings and
   water beyond it are not there, and changes near the edge only reach the skirt with the next full snapshot.
 * Biome tint is blended over 3×3 columns, not the player's biome blend setting. Cardinal (face) shading uses the default

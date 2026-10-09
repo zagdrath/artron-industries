@@ -142,8 +142,10 @@ public final class BotiSky {
                 cloudsPrepared = true;
                 drawClouds = true;
             }
-            int fogColor = env.fogColor();
-            fog = fogBuffer(fogColor, mc.options.getEffectiveRenderDistance() * 16.0F, mc.options.cloudRange().get() * 16.0F);
+            // The doorway's own fog colour and distance (see BotiFog), so the disc's rim fades out exactly where the skirt
+            // does, into the backdrop's colour.
+            fog = fogBuffer(draw.backdropBottom, Math.min(draw.fogEnd, BotiFog.SKY_FOG_END),
+                    Math.min(mc.options.cloudRange().get() * 16.0F, BotiFog.CLOUD_FOG_END));
             draw.sky = new Frame(
                     (sky.sunAngle() + track.sunPerTick * ahead) * Mth.DEG_TO_RAD,
                     (sky.moonAngle() + track.moonPerTick * ahead) * Mth.DEG_TO_RAD,

@@ -113,11 +113,9 @@ public final class SkirtBlockGetter implements BlockAndTintGetter {
         if (this.inBoxColumns(pos)) {
             return this.snapshot.getBrightness(layer, pos);
         }
-        // Lit like the edge column at the same height, but never darker than its open air just above its ground.
-        int x = this.clampX(pos.getX());
-        int z = this.clampZ(pos.getZ());
-        int y = Math.max(pos.getY(), this.groundAt(x, z) + 1);
-        return this.snapshot.getBrightness(layer, new BlockPos(x, y, z));
+        // Lit like the edge column at the same height (the snapshot clamps into the box), but never darker than its open
+        // air just above its ground.
+        return this.snapshot.getBrightness(layer, new BlockPos(pos.getX(), Math.max(pos.getY(), this.groundAt(pos.getX(), pos.getZ()) + 1), pos.getZ()));
     }
 
     @Override

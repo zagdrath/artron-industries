@@ -26,7 +26,7 @@ import net.zagdrath.artronindustries.boti.SnapshotBox;
 
 /**
  * Read-only view of a snapshot for the vanilla block and fluid renderers. Coordinates are far-side world coordinates;
- * anything outside the box is air with no light. Light levels are the far side's own; the view's lightmap
+ * anything outside the box is air, lit like the nearest position in the box. Light levels are the far side's own; the view's lightmap
  * ({@link BotiLightmaps}) turns them into colour like the far side's does. Immutable (it owns copies of the snapshot
  * arrays), so it is safe to mesh from off the render thread.
  */
@@ -91,13 +91,10 @@ public final class SnapshotBlockGetter implements BlockAndTintGetter {
         return null;
     }
 
+    /** Outside the box: the light of the nearest box position (see {@link SnapshotBox#clampedIndexOfWorld}). */
     @Override
     public int getBrightness(LightLayer layer, BlockPos pos) {
-        int i = this.index(pos);
-        if (i < 0) {
-            return 0;
-        }
-        byte packed = this.light[i];
+        byte packed = this.light[this.box.clampedIndexOfWorld(pos.getX(), pos.getY(), pos.getZ())];
         return layer == LightLayer.BLOCK ? PortalSnapshot.blockLight(packed) : PortalSnapshot.skyLight(packed);
     }
 

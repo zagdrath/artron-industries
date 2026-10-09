@@ -72,6 +72,16 @@ public record SnapshotBox(BlockPos origin, int sizeX, int sizeY, int sizeZ) {
         return this.index(x - this.origin.getX(), y - this.origin.getY(), z - this.origin.getZ());
     }
 
+    /**
+     * Index of the box position nearest to world {@code (x, y, z)}: the position itself inside the box, the edge's
+     * outside it. Light outside the box is read through this, so smooth lighting at the edge averages with the edge's
+     * own light instead of with darkness (which drew the box's outline on the ground).
+     */
+    public int clampedIndexOfWorld(int x, int y, int z) {
+        return this.indexOfWorld(Math.clamp(x, this.origin.getX(), this.maxX()), Math.clamp(y, this.origin.getY(), this.maxY()),
+                Math.clamp(z, this.origin.getZ(), this.maxZ()));
+    }
+
     public boolean containsWorld(int x, int y, int z) {
         int lx = x - this.origin.getX();
         int ly = y - this.origin.getY();
