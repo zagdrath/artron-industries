@@ -96,6 +96,8 @@ public final class SeamlessTransition {
             departure = Departure.of(event.getOldPlayer());
             event.getNewPlayer().firstPersonHandsAndItems = event.getOldPlayer().firstPersonHandsAndItems;
             startCover(c.key(), c.destination());
+            placeAtArrival(c, event.getOldPlayer(), event.getNewPlayer());
+            primeEnvironment(event.getNewPlayer().level(), event.getNewPlayer().getEyePosition());
         }
     }
 
@@ -133,6 +135,32 @@ public final class SeamlessTransition {
         avatar.walkDistO = d.walkDistO();
         avatar.bob = d.bob();
         avatar.bobO = d.bobO();
+    }
+
+    /**
+     * The new player starts wherever the respawn put it until the server's position packet arrives, which can be a frame
+     * or a tick later: put it where the old one will come out of the doorway straight away, so the first frame in the new
+     * level is already from the right place. The position packet then only corrects it.
+     */
+    private static void placeAtArrival(BotiCrossingPayload c, LocalPlayer oldPlayer, LocalPlayer newPlayer) {
+        BotiClientCache.View view = BotiClientCache.get(c.key());
+        if (view == null) {
+            return;
+        }
+        DoorPairTransform transform = view.snapshot().geometry().nearToFar();
+        Vec3 pos = transform.apply(oldPlayer.position());
+        float yaw = transform.applyYaw(oldPlayer.getYRot());
+        newPlayer.snapTo(pos.x, pos.y, pos.z, yaw, oldPlayer.getXRot());
+        newPlayer.setOldPosAndRot(pos, yaw, oldPlayer.getXRot());
+    }
+
+    /**
+     * A dimension change clears the camera's environment probe, and until it is next ticked (and while the new level has
+     * no chunks round the player) the sky and fog come out at their defaults: black, then grey, for several frames.
+     * Seeded with the destination at the arrival point, they are right from the first frame.
+     */
+    private static void primeEnvironment(Level level, Vec3 eye) {
+        Minecraft.getInstance().gameRenderer.mainCamera().attributeProbe().tick(level, eye);
     }
 
     private static LevelLoadingScreen screen(LevelLoadTracker tracker, LevelLoadingScreen.Reason reason) {
@@ -185,6 +213,10 @@ public final class SeamlessTransition {
             return;
         }
         releaseIfReady(mc);
+        if (mc.level != null && mc.level.dimension() == arrivalDestination) {
+            // Keep the environment seeded at the camera while the cover is up (vanilla's own tick may not run yet).
+            primeEnvironment(mc.level, mc.gameRenderer.mainCamera().position());
+        }
         boolean loaded = mc.getConnection() != null && mc.getConnection().hasClientLoaded();
         if (loaded) {
             lingerTicks++;

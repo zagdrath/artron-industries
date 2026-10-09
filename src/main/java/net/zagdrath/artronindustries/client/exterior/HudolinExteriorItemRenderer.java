@@ -39,6 +39,7 @@ public class HudolinExteriorItemRenderer implements NoDataSpecialModelRenderer {
         poseStack.pushPose();
         pose(poseStack);
         collector.submitModel(this.model, SHUT, poseStack, HudolinExteriorRenderer.TEXTURE, lightCoords, overlayCoords, outlineColor);
+        HudolinExteriorRenderer.submitWindows(this.model, SHUT, poseStack, collector);
         poseStack.popPose();
     }
 

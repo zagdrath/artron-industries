@@ -81,8 +81,14 @@ public class InteriorDoorwayRenderer implements BlockEntityRenderer<InteriorDoor
         // Turning by +90 degrees about Y takes (x, z) to (z, -x); the left leaf turns whichever way takes right onto facing.
         float sign = right.getStepZ() == facing.getStepX() && -right.getStepX() == facing.getStepZ() ? 1.0F : -1.0F;
         float plane = 0.5F - doorway.planeDepth();
-        float leftAngle = sign * OPEN_DEGREES * ease(door.leafOpenAmount(true, partialTicks));
-        float rightAngle = -sign * OPEN_DEGREES * ease(door.leafOpenAmount(false, partialTicks));
+        // Seen through the exterior (a copy made from the view's snapshot, not the door in the world), the doors are always
+        // open: that view only shows while the exterior's doors are, and the copy's door state lags the real one, which
+        // would show the leaves' backs filling the doorway as the doors open and shut.
+        boolean throughExterior = door.getLevel() == null || door.getLevel().getBlockEntity(door.getBlockPos()) != door;
+        float leftOpen = throughExterior ? 1.0F : ease(door.leafOpenAmount(true, partialTicks));
+        float rightOpen = throughExterior ? 1.0F : ease(door.leafOpenAmount(false, partialTicks));
+        float leftAngle = sign * OPEN_DEGREES * leftOpen;
+        float rightAngle = -sign * OPEN_DEGREES * rightOpen;
         Matrix4f leftHinge = hingeTurn(doorway.hinge(true), plane, right, facing, leftAngle);
         Matrix4f rightHinge = hingeTurn(doorway.hinge(false), plane, right, facing, rightAngle);
         // The leaves themselves are squashed towards their front face to the doorway's leaf thickness.

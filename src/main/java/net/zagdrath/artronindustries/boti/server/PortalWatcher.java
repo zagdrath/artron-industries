@@ -75,6 +75,12 @@ public final class PortalWatcher {
     private static final double HYSTERESIS = 4.0;
 
     private static final Map<PortalViewKey, WatchedView> VIEWS = new HashMap<>();
+    /** Players about to walk through a doorway, subscribed to the view they will see from the other side. */
+    private static final Map<UUID, Ahead> AHEAD = new HashMap<>();
+    /** How long, in ticks, a subscription ahead of a crossing lasts unless renewed. */
+    private static final int AHEAD_TICKS = 60;
+
+    private record Ahead(PortalViewKey key, TardisRecord record, long until) {}
     private static int nextSequence = 1;
     private static long ticks;
 
@@ -155,6 +161,16 @@ public final class PortalWatcher {
             }
         }
 
+        AHEAD.values().removeIf(a -> a.until() < ticks || manager.get(a.record().uuid()) == null);
+        for (Map.Entry<UUID, Ahead> entry : AHEAD.entrySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
+            List<ServerPlayer> want = desired.computeIfAbsent(entry.getValue().key(), k -> new ArrayList<>());
+            if (player != null && !want.contains(player)) {
+                want.add(player);
+                records.put(entry.getValue().key(), entry.getValue().record());
+            }
+        }
+
         for (Iterator<Map.Entry<PortalViewKey, WatchedView>> it = VIEWS.entrySet().iterator(); it.hasNext(); ) {
             Map.Entry<PortalViewKey, WatchedView> entry = it.next();
             WatchedView view = entry.getValue();
@@ -179,6 +195,17 @@ public final class PortalWatcher {
         }
     }
 
+    /**
+     * Subscribes {@code player}, about to walk through a doorway, to the view back through it from the {@code arrivalSide}:
+     * by the time it comes out, the doorway behind it already shows where it came from, instead of the inside of the
+     * door's frame for the few ticks until the next scan and capture. Lasts {@link #AHEAD_TICKS} unless renewed.
+     */
+    public static void subscribeAhead(MinecraftServer server, TardisRecord record, PortalSide arrivalSide, ServerPlayer player) {
+        PortalViewKey key = new PortalViewKey(record.uuid(), arrivalSide);
+        AHEAD.put(player.getUUID(), new Ahead(key, record, ticks + AHEAD_TICKS));
+        subscribe(server, record, arrivalSide, player);
+    }
+
     /** Subscribes {@code player} to the view through the door on {@code nearSide}, sending the full snapshot if new. */
     public static void subscribe(MinecraftServer server, TardisRecord record, PortalSide nearSide, ServerPlayer player) {
         PortalViewKey key = new PortalViewKey(record.uuid(), nearSide);
@@ -196,8 +223,13 @@ public final class PortalWatcher {
         }
     }
 
+    /** On a dimension change: every view goes but the one a crossing subscribed ahead of time, which is now in use. */
     private static void unsubscribeAll(ServerPlayer player) {
+        Ahead ahead = AHEAD.get(player.getUUID());
         for (WatchedView view : VIEWS.values()) {
+            if (ahead != null && view.key.equals(ahead.key())) {
+                continue;
+            }
             if (view.watchers.remove(player.getUUID())) {
                 PacketDistributor.sendToPlayer(player, new BotiClearPayload(view.key));
             }
@@ -205,6 +237,7 @@ public final class PortalWatcher {
     }
 
     private static void forget(UUID player) {
+        AHEAD.remove(player);
         VIEWS.values().forEach(v -> v.watchers.remove(player));
     }
 

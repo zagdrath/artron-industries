@@ -16,6 +16,7 @@ import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.client.renderer.blockentity.state.BlockEntityRenderState;
 import net.minecraft.client.renderer.feature.ModelFeatureRenderer;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.BlockPos;
@@ -38,6 +39,9 @@ public class HudolinExteriorRenderer implements BlockEntityRenderer<TardisBlockE
         BotiDoorOverlay<HudolinExteriorRenderer.RenderState> {
     public static final ModelLayerLocation LAYER = new ModelLayerLocation(Identifier.fromNamespaceAndPath(ArtronIndustries.MODID, "hudolin_exterior"), "main");
     public static final Identifier TEXTURE = Identifier.fromNamespaceAndPath(ArtronIndustries.MODID, "textures/block/exterior/hudolin.png");
+    /** The lit windows, drawn again over the model at full brightness so they glow in the dark. */
+    public static final Identifier EMISSIVE_TEXTURE = Identifier.fromNamespaceAndPath(ArtronIndustries.MODID, "textures/block/exterior/hudolin_emissive.png");
+    private static final int FULL_BRIGHT = 0xF000F0;
 
     private final HudolinExteriorModel model;
 
@@ -71,6 +75,7 @@ public class HudolinExteriorRenderer implements BlockEntityRenderer<TardisBlockE
         poseStack.pushPose();
         orient(poseStack, state.facing);
         collector.submitModel(this.model, modelState, poseStack, TEXTURE, state.lightCoords, OverlayTexture.NO_OVERLAY, 0);
+        submitWindows(this.model, modelState, poseStack, collector);
         if (state.breakProgress != null) {
             collector.order(1).submitCrumblingOverlay(this.model, modelState, poseStack, this.model.renderType(TEXTURE),
                     state.lightCoords, OverlayTexture.NO_OVERLAY, -1, state.breakProgress);
@@ -85,9 +90,15 @@ public class HudolinExteriorRenderer implements BlockEntityRenderer<TardisBlockE
         }
         poseStack.pushPose();
         orient(poseStack, state.facing);
-        collector.submitModel(this.model, new HudolinExteriorModel.State(state.right, state.left, true), poseStack, TEXTURE,
-                state.lightCoords, OverlayTexture.NO_OVERLAY, 0);
+        HudolinExteriorModel.State doors = new HudolinExteriorModel.State(state.right, state.left, true);
+        collector.submitModel(this.model, doors, poseStack, TEXTURE, state.lightCoords, OverlayTexture.NO_OVERLAY, 0);
+        submitWindows(this.model, doors, poseStack, collector);
         poseStack.popPose();
+    }
+
+    /** The emissive layer: the windows, lit whatever the light around the box. */
+    static void submitWindows(HudolinExteriorModel model, HudolinExteriorModel.State state, PoseStack poseStack, SubmitNodeCollector collector) {
+        collector.submitModel(model, state, poseStack, RenderTypes.eyes(EMISSIVE_TEXTURE), FULL_BRIGHT, OverlayTexture.NO_OVERLAY, 0);
     }
 
     /**

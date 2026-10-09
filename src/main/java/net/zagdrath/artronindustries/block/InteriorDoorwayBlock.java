@@ -52,8 +52,9 @@ import net.zagdrath.artronindustries.tardis.interior.InteriorDoorway;
  * One cell of an {@link InteriorDoorway}, the door of a template interior made of its own blocks. Draws nothing: the
  * {@link InteriorDoorwayBlockEntity} in the {@link #MASTER} cell keeps the blocks the cells replaced and draws them as the
  * two leaves. A shut cell collides with the front {@link #DEPTH} sixteenths of itself, as much of the leaf as is drawn
- * there; an open one does not collide and shows no outline, except to someone sneaking, so the doors can still be shut
- * from inside without a box hanging in the open doorway.
+ * there. Open cells do not collide; those of the {@link #LEAF} layer keep a thin panel on the doorway plane as their
+ * outline, so clicking anywhere in the open doorway shuts the doors, and the others have none, so they do not catch the
+ * click in front of it.
  */
 public class InteriorDoorwayBlock extends BaseEntityBlock {
     public static final EnumProperty<Direction> FACING = BlockStateProperties.HORIZONTAL_FACING;
@@ -61,6 +62,10 @@ public class InteriorDoorwayBlock extends BaseEntityBlock {
     public static final BooleanProperty OPEN = BlockStateProperties.OPEN;
     /** How far into the cell, in sixteenths from its front (room) face, the shut leaf collides; 0 for none. */
     public static final IntegerProperty DEPTH = IntegerProperty.create("depth", 0, 16);
+    /** Whether the cell is in the leaves' own (back) layer, which the doorway plane runs through. */
+    public static final BooleanProperty LEAF = BooleanProperty.create("leaf");
+    /** By the plane's depth into the cell (sixteenths from its front), then facing: the open doorway's click panel. */
+    private static final List<Map<Direction, VoxelShape>> PLANE_SHAPES = planeShapes();
     /** By depth, then facing. */
     private static final List<Map<Direction, VoxelShape>> DEPTH_SHAPES = depthShapes();
     /** The back of a cell that does not collide (panelling): what is clicked to open the doors. */
@@ -69,12 +74,12 @@ public class InteriorDoorwayBlock extends BaseEntityBlock {
     public InteriorDoorwayBlock(BlockBehaviour.Properties properties) {
         super(properties);
         this.registerDefaultState(this.stateDefinition.any().setValue(FACING, Direction.NORTH).setValue(MASTER, false)
-                .setValue(OPEN, false).setValue(DEPTH, 16));
+                .setValue(OPEN, false).setValue(DEPTH, 16).setValue(LEAF, false));
     }
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        builder.add(FACING, MASTER, OPEN, DEPTH);
+        builder.add(FACING, MASTER, OPEN, DEPTH, LEAF);
     }
 
     /**
@@ -94,7 +99,8 @@ public class InteriorDoorwayBlock extends BaseEntityBlock {
         }
         BlockState cell = ArtronBlocks.INTERIOR_DOORWAY.get().defaultBlockState().setValue(FACING, facing);
         for (int index = 0; index < doorway.cellCount(); index++) {
-            level.setBlock(doorway.cell(master, facing, index), cell.setValue(MASTER, index == 0).setValue(DEPTH, depth.get(index)), CELL_UPDATE);
+            level.setBlock(doorway.cell(master, facing, index), cell.setValue(MASTER, index == 0).setValue(DEPTH, depth.get(index))
+                    .setValue(LEAF, doorway.isLeafLayer(doorway.d(index))), CELL_UPDATE);
         }
         if (level.getBlockEntity(master) instanceof InteriorDoorwayBlockEntity door) {
             door.install(doorway, leaves);
@@ -120,6 +126,15 @@ public class InteriorDoorwayBlock extends BaseEntityBlock {
         return shapes;
     }
 
+    private static List<Map<Direction, VoxelShape>> planeShapes() {
+        List<Map<Direction, VoxelShape>> shapes = new ArrayList<>();
+        for (int depth = 0; depth <= 16; depth++) {
+            double front = Math.min(depth, 15);
+            shapes.add(Shapes.rotateHorizontal(Block.box(0.0, 0.0, front, 16.0, 16.0, front + 1.0)));
+        }
+        return shapes;
+    }
+
     /** The shut cell's outline: the leaf where it collides, otherwise the back of the cell (where panelling sits on it). */
     private static VoxelShape shutOutline(BlockState state) {
         int depth = state.getValue(DEPTH);
@@ -128,7 +143,11 @@ public class InteriorDoorwayBlock extends BaseEntityBlock {
 
     @Override
     protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
-        return !state.getValue(OPEN) || context.isDescending() ? shutOutline(state) : Shapes.empty();
+        if (!state.getValue(OPEN)) {
+            return shutOutline(state);
+        }
+        // The plane lies just behind the leaf, whose thickness is the cell's depth.
+        return state.getValue(LEAF) ? PLANE_SHAPES.get(state.getValue(DEPTH)).get(state.getValue(FACING)) : Shapes.empty();
     }
 
     @Override

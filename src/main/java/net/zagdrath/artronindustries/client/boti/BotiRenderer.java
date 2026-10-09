@@ -107,6 +107,8 @@ public final class BotiRenderer {
         final double distanceSqr;
         final boolean fallback;
         final boolean debugFloating;
+        /** The arrival cover after walking through a doorway (see SeamlessTransition). */
+        boolean arrival;
         @Nullable Matrix4f model;
         /** The far doorway plane in box-local space (see SnapshotBox#clipPlane); nothing behind it is drawn. */
         Vector3f clip = NO_CLIP;
@@ -244,6 +246,7 @@ public final class BotiRenderer {
             // Just walked through a doorway: until the real chunks are compiled, draw the cached far side where it is.
             Vec3 origin = Vec3.atLowerCornerOf(arrivalView.snapshot().box().origin());
             DoorDraw draw = new DoorDraw(arrival, arrivalView, new Vector3f[0], 0.0, false, true);
+            draw.arrival = true;
             draw.model = new Matrix4f().translation((float) (origin.x - camera.x), (float) (origin.y - camera.y), (float) (origin.z - camera.z));
             draw.boxLocalCamera = camera.subtract(origin).toVector3f();
             draw.farCamera = camera;
@@ -485,6 +488,16 @@ public final class BotiRenderer {
                 continue;
             }
             blockEntities = ArtronClientConfig.RENDER_BLOCK_ENTITIES.getAsBoolean() ? BotiBlockEntities.get(draw.view, mc.level) : List.of();
+            if (draw.arrival) {
+                // Out of a TARDIS, the snapshot holds what is in front of its doorway but not the police box itself, which
+                // stands behind it; until the box's own chunk is here, a stand-in is drawn so looking back shows it.
+                BlockEntity box = BotiBlockEntities.arrivalExterior(draw.view, mc.level);
+                if (box != null) {
+                    List<BlockEntity> withBox = new ArrayList<>(blockEntities);
+                    withBox.add(box);
+                    blockEntities = withBox;
+                }
+            }
             entities = BotiEntities.get(draw.key);
             overlayDoor = draw.endpoint instanceof BlockEntity be && mc.getBlockEntityRenderDispatcher().getRenderer(be) instanceof BotiDoorOverlay<?> ? be : null;
             if (!blockEntities.isEmpty() || !entities.isEmpty() || overlayDoor != null) {
@@ -518,7 +531,9 @@ public final class BotiRenderer {
                 continue;
             }
             BlockPos pos = be.getBlockPos();
-            state.lightCoords = lightAt(snapshot, owner, pos.getX(), pos.getY(), pos.getZ());
+            // A block entity behind the far doorway (the arrival's stand-in police box) is lit as just in front of it.
+            BlockPos lightPos = box.containsWorld(pos.getX(), pos.getY(), pos.getZ()) ? pos : pos.relative(snapshot.geometry().farFacing());
+            state.lightCoords = lightAt(snapshot, owner, lightPos.getX(), lightPos.getY(), lightPos.getZ());
             poseStack.pushPose();
             poseStack.translate(pos.getX() - box.origin().getX(), pos.getY() - box.origin().getY(), pos.getZ() - box.origin().getZ());
             beDispatcher.submit(state, poseStack, SUBMITS, levelState.cameraRenderState);

@@ -88,6 +88,13 @@ public class TardisBlock extends PortalDoorBlock {
 
     @Override
     public @Nullable BlockState getStateForPlacement(BlockPlaceContext context) {
+        // No TARDIS inside a TARDIS: its exterior would be in the interiors' dimension, among the cells.
+        if (TardisInteriorManager.isInterior(context.getLevel())) {
+            if (context.getPlayer() != null && !context.getLevel().isClientSide()) {
+                context.getPlayer().sendOverlayMessage(Component.translatable("message.artronindustries.tardis.not_inside"));
+            }
+            return null;
+        }
         BlockState state = super.getStateForPlacement(context);
         BlockPos top = context.getClickedPos().above(2);
         return state != null && top.getY() <= context.getLevel().getMaxY() && context.getLevel().getBlockState(top).canBeReplaced(context) ? state : null;
@@ -136,10 +143,10 @@ public class TardisBlock extends PortalDoorBlock {
 
     /**
      * Places all three blocks of a TARDIS at {@code pos} and allocates a new TARDIS for it, as if a player had placed it.
-     * Returns {@code null} if there is no room.
+     * Returns {@code null} if there is no room, or {@code level} is the interiors' dimension.
      */
     public @Nullable TardisRecord placeNewTardis(ServerLevel level, BlockPos pos, Direction facing, TardisExterior exterior, TardisInterior interior) {
-        if (!level.getBlockState(pos).canBeReplaced() || !level.getBlockState(pos.above()).canBeReplaced()
+        if (TardisInteriorManager.isInterior(level) || !level.getBlockState(pos).canBeReplaced() || !level.getBlockState(pos.above()).canBeReplaced()
                 || !level.getBlockState(pos.above(2)).canBeReplaced()) {
             return null;
         }

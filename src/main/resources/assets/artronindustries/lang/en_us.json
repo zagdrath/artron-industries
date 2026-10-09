@@ -44,6 +44,7 @@
   "block.artronindustries.interior_door": "TARDIS Interior Door (Placeholder)",
   "block.artronindustries.interior_doorway": "TARDIS Doorway",
   "message.artronindustries.tardis.created": "TARDIS #%s materialised",
+  "message.artronindustries.tardis.not_inside": "A TARDIS cannot materialise inside a TARDIS",
   "message.artronindustries.door.unlinked": "This door is not linked to a TARDIS",
   "message.artronindustries.door.no_exterior": "This TARDIS has no exterior to open onto",
   "message.artronindustries.door.not_in_interior": "Interior doors only link when placed inside a TARDIS",

@@ -91,6 +91,17 @@ public final class ClientSmokeTest {
         }
     }
 
+    /**
+     * Moves the player {@code distance} blocks the way it faces. Held movement keys only move it while the window has
+     * focus, which a scripted run cannot count on.
+     */
+    private static void walk(double distance) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null && mc.gui.screen() == null) {
+            mc.player.setPos(mc.player.position().add(Vec3.directionFromRotation(0.0F, mc.player.getYRot()).scale(distance)));
+        }
+    }
+
     private static void shot(String name) {
         Minecraft mc = Minecraft.getInstance();
         Screenshot.grab(mc.gameDirectory, "boti_" + name + ".png", mc.gameRenderer.mainRenderTarget(), 1,
@@ -257,12 +268,13 @@ public final class ClientSmokeTest {
             Minecraft mc = Minecraft.getInstance();
             mc.options.keyUp.setDown(true);
             mc.options.keySprint.setDown(true);
-        }, () -> !TardisInteriorManager.isInterior(Minecraft.getInstance().level), 30);
+        }, () -> !TardisInteriorManager.isInterior(Minecraft.getInstance().level) && Minecraft.getInstance().gui.screen() == null, 30);
         for (int i = 0; i < 16; i++) {
             String name = String.format("walk_in_%02d", i);
             this.step(name, () -> {
                 // Screens release keys; a real player keeps holding them.
                 Minecraft.getInstance().options.keyUp.setDown(true);
+                walk(0.4);
                 Minecraft.getInstance().options.keySprint.setDown(true);
                 shot(name);
             }, null, 2);
@@ -283,6 +295,7 @@ public final class ClientSmokeTest {
             String name = String.format("walk_out_%02d", i);
             this.step(name, () -> {
                 Minecraft.getInstance().options.keyUp.setDown(true);
+                walk(0.3);
                 shot(name);
             }, null, 2);
         }
@@ -366,6 +379,43 @@ public final class ClientSmokeTest {
         }), null, 0);
         this.step("parlour_outside_shot", () -> shot("parlour_outside_in"), () -> viewReady(this.parlour, PortalSide.EXTERIOR)
                 && !TardisInteriorManager.isInterior(Minecraft.getInstance().level), 60);
+        // From outside, part-way through opening and closing: the parlour's own doors must never fill the doorway.
+        this.step("parlour_shut_again", () -> onServer(server -> TardisInteriorManager.get(server).setDoorState(server, this.parlour, DoorState.CLOSED)), null, 0);
+        this.step("parlour_reopen", () -> onServer(server -> TardisInteriorManager.get(server).setDoorState(server, this.parlour, DoorState.BOTH_OPEN)), null, 40);
+        this.step("parlour_outside_opening_shot", () -> shot("parlour_outside_opening"), null, 4);
+        this.step("parlour_reclose", () -> onServer(server -> TardisInteriorManager.get(server).setDoorState(server, this.parlour, DoorState.CLOSED)), null, 40);
+        this.step("parlour_outside_closing_shot", () -> shot("parlour_outside_closing"), null, 4);
+        // The police box's lit windows at night, doors shut.
+        this.step("exterior_night", () -> onServer(server -> {
+            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "time set 18000");
+            TardisInteriorManager.get(server).setDoorState(server, this.parlour, DoorState.CLOSED);
+            Vec3 exDoor = this.parlour.exteriorShape().center(this.parlour.exteriorDoorPos(), this.parlour.exteriorFacing());
+            Vec3 out = Vec3.atLowerCornerOf(this.parlour.exteriorFacing().getUnitVec3i());
+            Vec3 side = Vec3.atLowerCornerOf(net.zagdrath.artronindustries.portal.PortalShape.right(this.parlour.exteriorFacing()).getUnitVec3i());
+            place(server.overworld(), exDoor.add(out.scale(4.0)).add(side.scale(2.5)).subtract(0.0, 1.3, 0.0), exDoor.add(0.0, 0.3, 0.0));
+        }), null, 0);
+        this.step("exterior_night_shot", () -> shot("exterior_night"), () -> !TardisInteriorManager.isInterior(Minecraft.getInstance().level)
+                && Minecraft.getInstance().levelRenderer.hasRenderedAllSections(), 60);
+        this.step("exterior_day", () -> onServer(server -> server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "time set 6000")), null, 0);
+        this.step("exterior_day_shot", () -> shot("exterior_day"), null, 40);
+        // Walking backwards out of the parlour, looking into the room, then at the police box: no black or grey frames, and
+        // the box is there as soon as the overworld is.
+        this.step("parlour_back_setup", () -> onServer(server -> {
+            TardisInteriorManager.get(server).setDoorState(server, this.parlour, DoorState.BOTH_OPEN);
+            Vec3 inDoor = this.parlourDoor();
+            place(TardisInteriorManager.interiorLevel(server), inDoor.add(this.parlourFacing().scale(1.4)).subtract(0.0, 2.0, 0.0),
+                    inDoor.add(this.parlourFacing().scale(20.0)).add(Vec3.atLowerCornerOf(net.zagdrath.artronindustries.portal.PortalShape.right(
+                            this.parlour.interiorDoorFacing()).getUnitVec3i()).scale(6.0)));
+        }), null, 0);
+        this.step("parlour_back_ready", () -> {}, () -> TardisInteriorManager.isInterior(Minecraft.getInstance().level)
+                && Minecraft.getInstance().levelRenderer.hasRenderedAllSections(), 40);
+        for (int i = 0; i < 24; i++) {
+            String name = String.format("parlour_back_out_%02d", i);
+            this.step(name, () -> {
+                walk(-0.22);
+                shot(name);
+            }, null, 1);
+        }
         this.step("quit", () -> {
             BotiRenderer.setDebugFloatingPos(null);
             ArtronIndustries.LOGGER.info("CLIENT SMOKE done: {}", String.format("rebuild %.2f ms, draw %.3f ms (%d doorways)",
@@ -399,6 +449,10 @@ public final class ClientSmokeTest {
         if (this.index >= this.steps.size()) {
             return;
         }
+        if (mc.gui.screen() instanceof net.minecraft.client.gui.screens.ChatScreen) {
+            // The dev window takes focus when it starts; typing elsewhere can open chat in it, which stops movement.
+            mc.gui.setScreen(null);
+        }
         if (mc.player.isDeadOrDying()) {
             // A run that stopped part-way can leave the player falling out of the bottom of the interior dimension.
             mc.player.respawn();
@@ -426,7 +480,7 @@ public final class ClientSmokeTest {
         Step step = this.steps.get(this.index);
         if (step.until() != null && !step.until().getAsBoolean()) {
             if (--this.timeout <= 0) {
-                ArtronIndustries.LOGGER.error("CLIENT SMOKE timed out before step {}", step.name());
+                ArtronIndustries.LOGGER.error("CLIENT SMOKE timed out before step {} (screen {})", step.name(), mc.gui.screen() == null ? "none" : mc.gui.screen().getClass().getName());
                 this.index = this.steps.size();
                 mc.stop();
             }

@@ -118,6 +118,12 @@ public abstract class PortalDoorBlockEntity extends BlockEntity implements Porta
         this.sync();
     }
 
+    /** Shows the doors fully open, without animating, syncing or playing a sound: for client-side stand-ins. */
+    public void showOpen() {
+        this.doorState = DoorState.BOTH_OPEN;
+        this.snapAnimation();
+    }
+
     public boolean isOpen() {
         return this.doorState.isOpen();
     }

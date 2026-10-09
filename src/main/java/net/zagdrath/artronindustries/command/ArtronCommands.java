@@ -52,6 +52,8 @@ public final class ArtronCommands {
             id -> Component.translatable("commands.artronindustries.tardis.unknown_exterior", id));
     private static final DynamicCommandExceptionType UNKNOWN_INTERIOR = new DynamicCommandExceptionType(
             id -> Component.translatable("commands.artronindustries.tardis.unknown_interior", id));
+    private static final SimpleCommandExceptionType NOT_INSIDE_TARDIS = new SimpleCommandExceptionType(
+            Component.translatable("message.artronindustries.tardis.not_inside"));
     private static final SimpleCommandExceptionType NOT_IN_TARDIS = new SimpleCommandExceptionType(
             Component.translatable("commands.artronindustries.tardis.not_inside"));
 
@@ -140,6 +142,9 @@ public final class ArtronCommands {
     /** Places a TARDIS two blocks in front of the player, facing them, which allocates a new TARDIS. */
     private static int create(CommandSourceStack source, TardisExterior exterior, TardisInterior interior) throws CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
+        if (TardisInteriorManager.isInterior(source.getLevel())) {
+            throw NOT_INSIDE_TARDIS.create();
+        }
         Direction look = player.getDirection();
         BlockPos pos = player.blockPosition().relative(look, 2);
         TardisRecord record = ArtronBlocks.TARDIS.get().placeNewTardis(source.getLevel(), pos, look.getOpposite(), exterior, interior);

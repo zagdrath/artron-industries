@@ -31,6 +31,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import net.zagdrath.artronindustries.ArtronIndustries;
 import net.zagdrath.artronindustries.Config;
 import net.zagdrath.artronindustries.block.entity.PortalDoorBlockEntity;
+import net.zagdrath.artronindustries.boti.server.PortalWatcher;
 import net.zagdrath.artronindustries.boti.PortalViewKey;
 import net.zagdrath.artronindustries.network.BotiArrivalPayload;
 import net.zagdrath.artronindustries.network.BotiCrossingPayload;
@@ -145,6 +146,8 @@ public final class DoorwayCrossing {
         PortalViewKey key = new PortalViewKey(record.uuid(), from);
         TeleportTransition transition;
         if (entity instanceof ServerPlayer serverPlayer) {
+            // Normally already done on the way to the door (see prewarm); at the latest, now.
+            PortalWatcher.subscribeAhead(server, record, to, serverPlayer);
             PacketDistributor.sendToPlayer(serverPlayer, new BotiCrossingPayload(key, destination.dimension(), position, transform.quarterTurns()));
             // The client moves its own player and the server's copy lags it by a tick or two, so the turn and the velocity
             // are relative to what the client has: it keeps exactly its own look direction and speed, turned with the doorway.
@@ -200,7 +203,7 @@ public final class DoorwayCrossing {
      */
     private static void prewarm(MinecraftServer server, TardisRecord record, PortalSide side, ServerPlayer player, PortalShape shape,
                                 BlockPos pos, Direction facing, Vec3 before, Vec3 now) {
-        if (before == null || ticks % 10 != 0) {
+        if (before == null) {
             return;
         }
         double d = shape.signedDistance(pos, facing, now);
@@ -209,6 +212,11 @@ public final class DoorwayCrossing {
             return;
         }
         PortalSide to = side.opposite();
+        // Every tick: cheap once subscribed, and the sooner the view back through the door is there, the better.
+        PortalWatcher.subscribeAhead(server, record, to, player);
+        if (ticks % 10 != 0) {
+            return;
+        }
         ServerLevel destination = TardisInteriorManager.level(server, record, to);
         if (destination != null) {
             destination.getChunkSource().addTicketWithRadius(ArtronTickets.PORTAL_PREWARM.get(), ChunkPos.containing(record.doorPos(to)), 3);

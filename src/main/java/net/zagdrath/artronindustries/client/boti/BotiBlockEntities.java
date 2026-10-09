@@ -9,6 +9,8 @@ import java.util.Collection;
 import java.util.IdentityHashMap;
 import java.util.Map;
 
+import org.jspecify.annotations.Nullable;
+
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -17,8 +19,14 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.zagdrath.artronindustries.ArtronIndustries;
+import net.zagdrath.artronindustries.block.PortalDoorBlock;
+import net.zagdrath.artronindustries.block.entity.TardisBlockEntity;
+import net.zagdrath.artronindustries.boti.PortalGeometry;
 import net.zagdrath.artronindustries.boti.PortalSnapshot;
+import net.zagdrath.artronindustries.portal.PortalSide;
+import net.zagdrath.artronindustries.registry.ArtronBlocks;
 
 /**
  * Lightweight client-side block entity instances for a view, created from the snapshot's block entity NBT so their
@@ -63,6 +71,30 @@ public final class BotiBlockEntities {
 
     static void release(BotiClientCache.View view) {
         INSTANCES.remove(view);
+        ARRIVAL_EXTERIORS.remove(view);
+    }
+
+    private static final Map<BotiClientCache.View, BlockEntity> ARRIVAL_EXTERIORS = new IdentityHashMap<>();
+
+    /**
+     * For the arrival cover of a view looking out of a TARDIS: a stand-in for the police box behind the exterior doorway,
+     * doors open, for as long as the cover is up (the real one is only drawn once its section is compiled, which can be
+     * after its block has arrived). Null for views looking in.
+     */
+    static @Nullable BlockEntity arrivalExterior(BotiClientCache.View view, ClientLevel level) {
+        PortalGeometry geometry = view.snapshot().geometry();
+        if (view.snapshot().key().nearSide() != PortalSide.INTERIOR) {
+            return null;
+        }
+        BlockPos pos = geometry.farPos();
+        return ARRIVAL_EXTERIORS.computeIfAbsent(view, v -> {
+            BlockState state = ArtronBlocks.TARDIS.get().defaultBlockState()
+                    .setValue(PortalDoorBlock.FACING, geometry.farFacing()).setValue(PortalDoorBlock.HALF, DoubleBlockHalf.LOWER);
+            TardisBlockEntity box = new TardisBlockEntity(pos, state);
+            box.setLevel(level);
+            box.showOpen();
+            return box;
+        });
     }
 
 }
