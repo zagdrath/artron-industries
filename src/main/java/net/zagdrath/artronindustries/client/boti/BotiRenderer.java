@@ -113,6 +113,8 @@ public final class BotiRenderer {
         final boolean debugFloating;
         /** The arrival cover after walking through a doorway (see SeamlessTransition). */
         boolean arrival;
+        /** The arrival cover's opacity this frame, while it fades out. */
+        float arrivalAlpha = 1.0F;
         @Nullable Matrix4f model;
         /** The far doorway plane in box-local space (see SnapshotBox#clipPlane); nothing behind it is drawn. */
         Vector3f clip = NO_CLIP;
@@ -269,11 +271,15 @@ public final class BotiRenderer {
 
         PortalViewKey arrival = SeamlessTransition.arrivalCover(level);
         BotiClientCache.View arrivalView = arrival == null ? null : BotiClientCache.get(arrival);
+        if (arrival != null) {
+            SeamlessTransition.coverFrustum(frustum);
+        }
         if (arrivalView != null && !fallback) {
             // Just walked through a doorway: until the real chunks are compiled, draw the cached far side where it is.
             Vec3 origin = Vec3.atLowerCornerOf(arrivalView.snapshot().box().origin());
-            DoorDraw draw = new DoorDraw(arrival, arrivalView, new Vector3f[0], 0.0, false, true);
+            DoorDraw draw = new DoorDraw(arrival, arrivalView, new Vector3f[0], 0.0, false, false);
             draw.arrival = true;
+            draw.arrivalAlpha = SeamlessTransition.arrivalAlpha(partialTick);
             draw.frustum = frustum;
             draw.nearCamera = camera;
             draw.model = new Matrix4f().translation((float) (origin.x - camera.x), (float) (origin.y - camera.y), (float) (origin.z - camera.z));
@@ -455,7 +461,7 @@ public final class BotiRenderer {
                 }
             }
             // Until the far side can be drawn, leave the doorway alone rather than flash its bare backdrop.
-            draw.hidden = draw.warmOnly || (!draw.fallback && !draw.debugFloating && draw.mesh == null);
+            draw.hidden = draw.warmOnly || (!draw.fallback && !draw.debugFloating && !draw.arrival && draw.mesh == null);
         }
         BotiSky.prepare(draws, Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaPartialTick(false));
 
@@ -464,7 +470,7 @@ public final class BotiRenderer {
         try (ByteBufferBuilder bytes = new ByteBufferBuilder(draws.size() * QUADS_PER_DOOR * 4 * DefaultVertexFormat.POSITION_COLOR.getVertexSize())) {
             BufferBuilder builder = new BufferBuilder(bytes, PrimitiveTopology.QUADS, DefaultVertexFormat.POSITION_COLOR);
             for (DoorDraw draw : draws) {
-                if (draw.debugFloating || draw.hidden) {
+                if (draw.debugFloating || draw.arrival || draw.hidden) {
                     continue;
                 }
                 draw.firstQuad = quads;
@@ -508,7 +514,7 @@ public final class BotiRenderer {
         float envEnd = 1.0E6F;
         float distanceStart = 1.0E6F;
         float distanceEnd = 1.0E6F;
-        if (draw.key.nearSide() == PortalSide.INTERIOR && !draw.debugFloating) {
+        if (draw.key.nearSide() == PortalSide.INTERIOR && !draw.debugFloating && !draw.arrival) {
             envStart = env.fogStart() - 160.0F * env.rain();
             envEnd = Math.max(Math.min(96.0F, env.fogEnd()), env.fogEnd() - 256.0F * env.rain());
             float renderDistance = Math.min(Minecraft.getInstance().options.getEffectiveRenderDistance() * 16, MAX_SKIRT_RADIUS);
@@ -795,9 +801,27 @@ public final class BotiRenderer {
             drawn++;
             sections += draw.sections.length + draw.skirtSections.length;
             pass.pushDebugGroup(() -> "BOTI " + draw.key);
+            if (draw.arrival) {
+                drawMesh(pass, draw, draw.mesh, draw.model, draw.clip, draw.sections, OPAQUE_LAYERS, view, sequential, indices.type(), mc, MeshMode.ARRIVAL);
+                drawMesh(pass, draw, draw.mesh, draw.model, draw.clip, draw.sections, TRANSLUCENT_LAYER, view, sequential, indices.type(), mc,
+                        MeshMode.ARRIVAL);
+                // Block entities and entities have no fade: they stay until the cover ends, behind the real ones they match.
+                if (draw.ownsBlockEntities && featureFrame != null) {
+                    RenderSystem.pushPipelineModifier(BotiPipelines.ARRIVAL_COVER);
+                    try {
+                        featureFrame.executeSolid(pass);
+                        featureFrame.executeTranslucent(pass);
+                    } finally {
+                        RenderSystem.popPipelineModifier();
+                    }
+                }
+                pass.popDebugGroup();
+                continue;
+            }
             if (draw.debugFloating) {
-                drawMesh(pass, draw, draw.mesh, draw.model, draw.clip, draw.sections, OPAQUE_LAYERS, view, sequential, indices.type(), mc, true);
-                drawMesh(pass, draw, draw.mesh, draw.model, draw.clip, draw.sections, TRANSLUCENT_LAYER, view, sequential, indices.type(), mc, true);
+                drawMesh(pass, draw, draw.mesh, draw.model, draw.clip, draw.sections, OPAQUE_LAYERS, view, sequential, indices.type(), mc, MeshMode.DEBUG);
+                drawMesh(pass, draw, draw.mesh, draw.model, draw.clip, draw.sections, TRANSLUCENT_LAYER, view, sequential, indices.type(), mc,
+                        MeshMode.DEBUG);
                 if (draw.ownsBlockEntities && featureFrame != null) {
                     featureFrame.executeSolid(pass);
                     featureFrame.executeTranslucent(pass);
@@ -828,11 +852,14 @@ public final class BotiRenderer {
                 pass.setUniform("Fog", draw.fog.slice());
             }
             // The skirt lies around the box, so its water is drawn before the box's.
-            drawMesh(pass, draw, draw.skirt, draw.skirtModel, draw.skirtClip, draw.skirtSections, OPAQUE_LAYERS, view, sequential, indices.type(), mc, false);
-            drawMesh(pass, draw, draw.mesh, draw.model, draw.clip, draw.sections, OPAQUE_LAYERS, view, sequential, indices.type(), mc, false);
+            drawMesh(pass, draw, draw.skirt, draw.skirtModel, draw.skirtClip, draw.skirtSections, OPAQUE_LAYERS, view, sequential, indices.type(), mc,
+                    MeshMode.DOORWAY);
+            drawMesh(pass, draw, draw.mesh, draw.model, draw.clip, draw.sections, OPAQUE_LAYERS, view, sequential, indices.type(), mc,
+                    MeshMode.DOORWAY);
             drawMesh(pass, draw, draw.skirt, draw.skirtModel, draw.skirtClip, draw.skirtSections, TRANSLUCENT_LAYER, view, sequential, indices.type(), mc,
-                    false);
-            drawMesh(pass, draw, draw.mesh, draw.model, draw.clip, draw.sections, TRANSLUCENT_LAYER, view, sequential, indices.type(), mc, false);
+                    MeshMode.DOORWAY);
+            drawMesh(pass, draw, draw.mesh, draw.model, draw.clip, draw.sections, TRANSLUCENT_LAYER, view, sequential, indices.type(), mc,
+                    MeshMode.DOORWAY);
             if (draw.ownsBlockEntities && featureFrame != null) {
                 RenderSystem.pushPipelineModifier(BotiPipelines.INSIDE_DOORWAY);
                 try {
@@ -864,24 +891,47 @@ public final class BotiRenderer {
         pass.drawIndexed(6, 1, 0, quad * 4, 0);
     }
 
+    /** Which block pipelines a mesh is drawn with. */
+    private enum MeshMode {
+        /** Inside a doorway's stencil. */
+        DOORWAY,
+        /** The floating debug view: unmasked. */
+        DEBUG,
+        /** The arrival cover: unmasked, behind real terrain, fading out. */
+        ARRIVAL
+    }
+
     /** Draws {@code layers} of the {@code sections} of {@code mesh} (nearest first), placed by {@code model}. */
     private static void drawMesh(RenderPass pass, DoorDraw draw, @Nullable BotiMesh mesh, @Nullable Matrix4f model, Vector3f clip, int[] sections,
                                  ChunkSectionLayer[] layers, Matrix4fc view, GpuBuffer sequential,
-                                 com.mojang.renderpearl.api.pipeline.IndexType sequentialType, Minecraft mc, boolean debug) {
+                                 com.mojang.renderpearl.api.pipeline.IndexType sequentialType, Minecraft mc, MeshMode mode) {
         if (mesh == null || mesh.isEmpty() || model == null || sections.length == 0) {
             return;
         }
         // The block shader reads the clip plane from ModelOffset, which it has no other use for.
-        GpuBufferSlice transforms = RenderSystem.getDynamicUniforms().writeTransform(new Matrix4f(view), new Vector4f(1.0F), new Vector3f(clip), model);
+        Vector4f modulator = new Vector4f(1.0F, 1.0F, 1.0F, mode == MeshMode.ARRIVAL ? draw.arrivalAlpha : 1.0F);
+        GpuBufferSlice transforms = RenderSystem.getDynamicUniforms().writeTransform(new Matrix4f(view), modulator, new Vector3f(clip), model);
         pass.setUniform("Sampler0", mc.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS).getTextureView(),
                 RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST, true));
         pass.setUniform("Sampler2", draw.lightmap != null ? draw.lightmap : mc.gameRenderer.lightmap(),
                 RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
         for (ChunkSectionLayer layer : layers) {
-            RenderPipeline pipeline = switch (layer) {
-                case SOLID -> debug ? BotiPipelines.DEBUG_BLOCK_SOLID : BotiPipelines.BLOCK_SOLID;
-                case CUTOUT -> debug ? BotiPipelines.DEBUG_BLOCK_CUTOUT : BotiPipelines.BLOCK_CUTOUT;
-                case TRANSLUCENT -> debug ? BotiPipelines.DEBUG_BLOCK_TRANSLUCENT : BotiPipelines.BLOCK_TRANSLUCENT;
+            RenderPipeline pipeline = switch (mode) {
+                case DOORWAY -> switch (layer) {
+                    case SOLID -> BotiPipelines.BLOCK_SOLID;
+                    case CUTOUT -> BotiPipelines.BLOCK_CUTOUT;
+                    case TRANSLUCENT -> BotiPipelines.BLOCK_TRANSLUCENT;
+                };
+                case DEBUG -> switch (layer) {
+                    case SOLID -> BotiPipelines.DEBUG_BLOCK_SOLID;
+                    case CUTOUT -> BotiPipelines.DEBUG_BLOCK_CUTOUT;
+                    case TRANSLUCENT -> BotiPipelines.DEBUG_BLOCK_TRANSLUCENT;
+                };
+                case ARRIVAL -> switch (layer) {
+                    case SOLID -> BotiPipelines.ARRIVAL_BLOCK_SOLID;
+                    case CUTOUT -> BotiPipelines.ARRIVAL_BLOCK_CUTOUT;
+                    case TRANSLUCENT -> BotiPipelines.ARRIVAL_BLOCK_TRANSLUCENT;
+                };
             };
             boolean pipelineSet = false;
             // Opaque layers nearest first (so depth testing rejects what is hidden), translucent farthest first.

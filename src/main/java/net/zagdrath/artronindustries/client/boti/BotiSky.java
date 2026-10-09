@@ -107,7 +107,7 @@ public final class BotiSky {
             return;
         }
         for (BotiRenderer.DoorDraw draw : draws) {
-            if (draw.hidden || draw.fallback || draw.debugFloating || draw.view == null || draw.farCamera == null
+            if (draw.hidden || draw.fallback || draw.debugFloating || draw.arrival || draw.view == null || draw.farCamera == null
                     || draw.key.nearSide() != PortalSide.INTERIOR) {
                 continue;
             }

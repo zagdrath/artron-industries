@@ -117,10 +117,34 @@ public final class BotiPipelines {
     public static final RenderPipeline DEBUG_BLOCK_TRANSLUCENT = blocks("debug_translucent", Optional.of(BlendFunction.TRANSLUCENT), 0.1F, null);
 
     /**
+     * Depth bias pushing the arrival cover away from the camera. The depth buffer is reverse-Z and the bias goes straight
+     * to {@code glPolygonOffset} / Vulkan's depth bias, so negative is farther (vanilla's crumbling decal, pulled towards
+     * the camera, uses +1/+10).
+     */
+    static final float ARRIVAL_BIAS_SCALE = -1.0F;
+    static final float ARRIVAL_BIAS_CONSTANT = -16.0F;
+
+    /**
+     * The arrival cover (see SeamlessTransition): the far side drawn where it really is, under real terrain that may
+     * already be there. A strict test plus a bias away from the camera means real terrain always wins a coplanar tie,
+     * which renderers with their own vertex maths (Sodium) never reproduce exactly; the cover only fills pixels where no
+     * terrain was drawn. Faded out by dithering on the colour modulator's alpha (DITHER_FADE in boti_block.fsh).
+     */
+    public static final RenderPipeline ARRIVAL_BLOCK_SOLID = arrivalBlocks("solid", Optional.empty(), -1.0F);
+    public static final RenderPipeline ARRIVAL_BLOCK_CUTOUT = arrivalBlocks("cutout", Optional.empty(), 0.5F);
+    public static final RenderPipeline ARRIVAL_BLOCK_TRANSLUCENT = arrivalBlocks("translucent", Optional.of(BlendFunction.TRANSLUCENT), 0.1F);
+
+    /**
      * Pipeline modifier applied while drawing block entities and entities seen through a doorway: every pipeline they use
      * gets the {@link #INSIDE} stencil test added, so they are clipped to the doorway exactly like the block mesh.
      */
     public static final ResourceKey<PipelineModifier> INSIDE_DOORWAY = ResourceKey.create(PipelineModifier.MODIFIERS_KEY, id("inside_doorway"));
+
+    /**
+     * Pipeline modifier applied while drawing the arrival cover's block entities and entities: the same strict test and
+     * bias as {@link #ARRIVAL_BLOCK_SOLID}, so the stand-ins lose to the real block entities they coincide with.
+     */
+    public static final ResourceKey<PipelineModifier> ARRIVAL_COVER = ResourceKey.create(PipelineModifier.MODIFIERS_KEY, id("arrival_cover"));
 
     private BotiPipelines() {}
 
@@ -133,11 +157,41 @@ public final class BotiPipelines {
         modEventBus.addListener(ConfigureMainRenderTargetEvent.class, ConfigureMainRenderTargetEvent::enableStencil);
         modEventBus.addListener(RegisterRenderPipelinesEvent.class, e -> {
             for (RenderPipeline p : new RenderPipeline[]{MARK_DOORWAY, BACKDROP, SEAL_DOORWAY, FALLBACK_DOORWAY, BLOCK_SOLID, BLOCK_CUTOUT,
-                    BLOCK_TRANSLUCENT, DEBUG_BLOCK_SOLID, DEBUG_BLOCK_CUTOUT, DEBUG_BLOCK_TRANSLUCENT}) {
+                    BLOCK_TRANSLUCENT, DEBUG_BLOCK_SOLID, DEBUG_BLOCK_CUTOUT, DEBUG_BLOCK_TRANSLUCENT, ARRIVAL_BLOCK_SOLID, ARRIVAL_BLOCK_CUTOUT,
+                    ARRIVAL_BLOCK_TRANSLUCENT}) {
                 e.registerPipeline(p);
             }
         });
-        modEventBus.addListener(RegisterPipelineModifiersEvent.class, e -> e.register(INSIDE_DOORWAY, BotiPipelines::insideDoorway));
+        modEventBus.addListener(RegisterPipelineModifiersEvent.class, e -> {
+            e.register(INSIDE_DOORWAY, BotiPipelines::insideDoorway);
+            e.register(ARRIVAL_COVER, BotiPipelines::arrivalCover);
+        });
+    }
+
+    private static RenderPipeline arrivalCover(RenderPipeline pipeline, Identifier name) {
+        DepthStencilState state = pipeline.getDepthStencilState();
+        if (state == null) {
+            return pipeline; // not depth tested: nothing to tie with
+        }
+        return pipeline.toBuilder()
+                .withLocation(name)
+                .withDepthStencilState(behindTerrain(state))
+                .build();
+    }
+
+    /** {@code state} made to lose every tie with what is already in the depth buffer (see {@link #ARRIVAL_BLOCK_SOLID}). */
+    private static DepthStencilState behindTerrain(DepthStencilState state) {
+        CompareOp test = state.depthTest() == CompareOp.GREATER_THAN_OR_EQUAL ? CompareOp.GREATER_THAN : state.depthTest();
+        return new DepthStencilState(test, state.writeDepth(), state.depthBiasScaleFactor() + ARRIVAL_BIAS_SCALE,
+                state.depthBiasConstant() + ARRIVAL_BIAS_CONSTANT, state.stencilTest());
+    }
+
+    private static RenderPipeline arrivalBlocks(String name, Optional<BlendFunction> blend, float alphaCutout) {
+        RenderPipeline base = blocks("arrival_" + name, blend, alphaCutout, null);
+        return base.toBuilder()
+                .withShaderDefine("DITHER_FADE")
+                .withDepthStencilState(behindTerrain(base.getDepthStencilState()))
+                .build();
     }
 
     private static RenderPipeline insideDoorway(RenderPipeline pipeline, Identifier name) {
