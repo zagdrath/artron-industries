@@ -61,5 +61,7 @@
   "commands.artronindustries.tardis.opened": "Opened the doors of TARDIS #%s",
   "commands.artronindustries.tardis.closed": "Closed the doors of TARDIS #%s",
   "commands.artronindustries.tardis.deleted": "Deleted TARDIS #%s",
-  "test.error.artronindustries": "%s"
+  "test.error.artronindustries": "%s",
+  "subtitles.artronindustries.tardis_door.open": "TARDIS door opens",
+  "subtitles.artronindustries.tardis_door.close": "TARDIS door closes"
 }

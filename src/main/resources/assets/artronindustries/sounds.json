@@ -6,5 +6,29 @@
         "stream": false
       }
     ]
+  },
+  "door.victorian_parlour.open": {
+    "sounds": [
+      "artronindustries:door/victorian_parlour_open"
+    ],
+    "subtitle": "subtitles.artronindustries.tardis_door.open"
+  },
+  "door.victorian_parlour.close": {
+    "sounds": [
+      "artronindustries:door/victorian_parlour_close"
+    ],
+    "subtitle": "subtitles.artronindustries.tardis_door.close"
+  },
+  "door.hudolin.open": {
+    "sounds": [
+      "artronindustries:door/hudolin_open"
+    ],
+    "subtitle": "subtitles.artronindustries.tardis_door.open"
+  },
+  "door.hudolin.close": {
+    "sounds": [
+      "artronindustries:door/hudolin_close"
+    ],
+    "subtitle": "subtitles.artronindustries.tardis_door.close"
   }
 }

@@ -16,6 +16,8 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.zagdrath.artronindustries.portal.PortalShape;
+import net.zagdrath.artronindustries.registry.ArtronSounds;
+import net.zagdrath.artronindustries.tardis.DoorSounds;
 import net.zagdrath.artronindustries.tardis.DoorState;
 
 /**
@@ -49,6 +51,8 @@ public final class HudolinExterior extends TardisExterior {
     private static final Map<DoorState, Map<Direction, VoxelShape>>[] OUTLINE = shapes(false);
     private static final Map<DoorState, Map<Direction, VoxelShape>>[] COLLISION = shapes(true);
 
+    private static final DoorSounds SOUNDS = new DoorSounds(ArtronSounds.HUDOLIN_DOOR_OPEN, ArtronSounds.HUDOLIN_DOOR_CLOSE);
+
     HudolinExterior(Identifier id) {
         super(id);
     }
@@ -56,6 +60,11 @@ public final class HudolinExterior extends TardisExterior {
     @Override
     public PortalShape doorway() {
         return DOORWAY;
+    }
+
+    @Override
+    public DoorSounds doorSounds() {
+        return SOUNDS;
     }
 
     @Override

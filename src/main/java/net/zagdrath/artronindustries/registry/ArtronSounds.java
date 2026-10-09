@@ -19,6 +19,12 @@ public final class ArtronSounds {
 
     /** The Victorian Parlour's interior hum: a seamless loop, played while a player is inside that interior. */
     public static final Supplier<SoundEvent> VICTORIAN_PARLOUR_HUM = register("interior_hum.victorian_parlour");
+    /** The Victorian Parlour's big interior doors. */
+    public static final Supplier<SoundEvent> VICTORIAN_PARLOUR_DOOR_OPEN = register("door.victorian_parlour.open");
+    public static final Supplier<SoundEvent> VICTORIAN_PARLOUR_DOOR_CLOSE = register("door.victorian_parlour.close");
+    /** The Hudolin police box's doors, heard from outside. */
+    public static final Supplier<SoundEvent> HUDOLIN_DOOR_OPEN = register("door.hudolin.open");
+    public static final Supplier<SoundEvent> HUDOLIN_DOOR_CLOSE = register("door.hudolin.close");
 
     private ArtronSounds() {}
 

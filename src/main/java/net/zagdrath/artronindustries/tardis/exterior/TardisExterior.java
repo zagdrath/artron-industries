@@ -9,6 +9,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.zagdrath.artronindustries.portal.PortalShape;
+import net.zagdrath.artronindustries.tardis.DoorSounds;
 import net.zagdrath.artronindustries.tardis.DoorState;
 
 /**
@@ -35,6 +36,11 @@ public abstract class TardisExterior {
      * {@code doors}, for an exterior facing {@code facing}, in that block's coordinates.
      */
     public abstract VoxelShape shape(boolean collision, int part, DoorState doors, Direction facing);
+
+    /** What its doors sound like opening and closing, heard outside. */
+    public DoorSounds doorSounds() {
+        return DoorSounds.IRON_DOOR;
+    }
 
     @Override
     public String toString() {

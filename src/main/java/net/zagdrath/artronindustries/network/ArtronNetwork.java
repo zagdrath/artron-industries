@@ -14,7 +14,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
  * dedicated server never loads client classes.
  */
 public final class ArtronNetwork {
-    public static final String VERSION = "3";
+    public static final String VERSION = "4";
 
     private ArtronNetwork() {}
 

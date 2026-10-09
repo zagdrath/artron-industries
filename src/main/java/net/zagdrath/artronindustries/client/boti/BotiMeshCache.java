@@ -39,7 +39,21 @@ public final class BotiMeshCache {
         boolean needsFull = true;
     }
 
+    /** A view's ground skirt (see BotiMeshBuilder#buildSkirt), rebuilt for a new snapshot or skirt box only. */
+    private static final class SkirtEntry {
+        @Nullable BotiMesh mesh;
+        @Nullable CompletableFuture<BotiMeshBuilder.Result> pending;
+        @Nullable PortalSnapshot builtFor;
+        @Nullable SnapshotBox builtBox;
+        @Nullable PortalSnapshot pendingFor;
+        @Nullable SnapshotBox pendingBox;
+    }
+
+    /** Skirt sections are much larger than the snapshot's: they are only culled, never rebuilt one at a time. */
+    static final int SKIRT_SECTION_SIZE = 64;
+
     private static final Map<BotiClientCache.View, Entry> ENTRIES = new IdentityHashMap<>();
+    private static final Map<BotiClientCache.View, SkirtEntry> SKIRTS = new IdentityHashMap<>();
     private static int rebuildsThisFrame;
     private static double lastRebuildMs;
     private static int lastRebuildSections;
@@ -83,6 +97,54 @@ public final class BotiMeshCache {
             schedule(entry, view);
         }
         return entry.mesh;
+    }
+
+    /**
+     * Returns the newest uploaded ground skirt of {@code view} over {@code skirtBox}, uploading a finished build or starting a
+     * new one when the view has a new snapshot or the skirt box changed. Render thread, outside any render pass.
+     */
+    static @Nullable BotiMesh prepareSkirt(BotiClientCache.View view, SnapshotBox skirtBox, Vector3f skirtLocalCamera) {
+        SkirtEntry entry = SKIRTS.computeIfAbsent(view, v -> new SkirtEntry());
+        if (entry.pending != null && entry.pending.isDone()) {
+            BotiMeshBuilder.Result result = entry.pending.getNow(null);
+            entry.pending = null;
+            if (result != null) {
+                try {
+                    if (entry.mesh != null) {
+                        entry.mesh.close();
+                    }
+                    entry.mesh = BotiMesh.upload(result, skirtLocalCamera);
+                    entry.builtFor = entry.pendingFor;
+                    entry.builtBox = entry.pendingBox;
+                    ArtronIndustries.LOGGER.debug("BOTI skirt {} built in {} ms", view.snapshot().key(), String.format("%.2f", result.nanos / 1.0E6));
+                } finally {
+                    result.close();
+                }
+            }
+        }
+        PortalSnapshot snapshot = view.snapshot();
+        boolean stale = entry.builtFor != snapshot || !skirtBox.equals(entry.builtBox);
+        Minecraft mc = Minecraft.getInstance();
+        if (stale && entry.pending == null && mc.level != null && rebuildsThisFrame < ArtronClientConfig.MAX_REBUILDS_PER_FRAME.getAsInt()) {
+            rebuildsThisFrame++;
+            entry.pendingFor = snapshot;
+            entry.pendingBox = skirtBox;
+            SkirtBlockGetter getter = new SkirtBlockGetter(new SnapshotBlockGetter(snapshot, SnapshotBlockGetter.biomeRegistry(mc.level)));
+            boolean ao = mc.options.ambientOcclusion().get();
+            boolean cutoutLeaves = mc.options.cutoutLeaves().get();
+            var blockModels = mc.getModelManager().getBlockStateModelSet();
+            var fluidModels = mc.getModelManager().getFluidStateModelSet();
+            var blockColors = mc.getBlockColors();
+            entry.pending = CompletableFuture.supplyAsync(() -> BotiMeshBuilder.buildSkirt(getter, skirtBox, SKIRT_SECTION_SIZE, ao, cutoutLeaves,
+                            blockModels, fluidModels, blockColors), Util.backgroundExecutor())
+                    .exceptionally(t -> {
+                        ArtronIndustries.LOGGER.error("BOTI skirt build failed for {}", snapshot.key(), t);
+                        return null;
+                    });
+        }
+        // Until a new snapshot's skirt is ready, the old one is drawn; one built for another box (the render distance
+        // changed) would not line up, so there is none until the new one is ready.
+        return entry.mesh != null && skirtBox.equals(entry.builtBox) ? entry.mesh : null;
     }
 
     private static void apply(Entry entry, BotiMeshBuilder.Result result, Vector3f boxLocalCamera) {
@@ -146,6 +208,19 @@ public final class BotiMeshCache {
 
     /** Frees the mesh of a removed view (render thread). */
     static void release(BotiClientCache.View view) {
+        SkirtEntry skirt = SKIRTS.remove(view);
+        if (skirt != null) {
+            if (skirt.mesh != null) {
+                skirt.mesh.close();
+            }
+            if (skirt.pending != null) {
+                skirt.pending.thenAccept(r -> {
+                    if (r != null) {
+                        r.close();
+                    }
+                });
+            }
+        }
         Entry entry = ENTRIES.remove(view);
         if (entry == null) {
             return;
@@ -166,6 +241,9 @@ public final class BotiMeshCache {
     public static void invalidateAll() {
         for (Entry entry : ENTRIES.values()) {
             entry.needsFull = true;
+        }
+        for (SkirtEntry skirt : SKIRTS.values()) {
+            skirt.builtFor = null;
         }
     }
 

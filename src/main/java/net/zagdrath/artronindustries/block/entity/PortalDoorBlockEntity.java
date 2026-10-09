@@ -19,7 +19,6 @@ import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
@@ -34,6 +33,7 @@ import net.zagdrath.artronindustries.portal.PortalEndpoint;
 import net.zagdrath.artronindustries.portal.PortalEndpoints;
 import net.zagdrath.artronindustries.portal.PortalShape;
 import net.zagdrath.artronindustries.portal.PortalSide;
+import net.zagdrath.artronindustries.tardis.DoorSounds;
 import net.zagdrath.artronindustries.tardis.DoorState;
 import net.zagdrath.artronindustries.tardis.TardisInteriorManager;
 import net.zagdrath.artronindustries.tardis.TardisRecord;
@@ -112,10 +112,20 @@ public abstract class PortalDoorBlockEntity extends BlockEntity implements Porta
         }
         boolean opening = state.ordinal() > this.doorState.ordinal();
         this.doorState = state;
-        if (this.level != null) {
-            this.level.playSound(null, this.worldPosition, opening ? SoundEvents.IRON_DOOR_OPEN : SoundEvents.IRON_DOOR_CLOSE, SoundSource.BLOCKS, 1.0F, 1.0F);
+        if (this.level instanceof ServerLevel serverLevel) {
+            DoorSounds sounds = this.doorSounds(serverLevel);
+            serverLevel.playSound(null, this.worldPosition, (opening ? sounds.open() : sounds.close()).get(), SoundSource.BLOCKS, 1.0F, 1.0F);
         }
         this.sync();
+    }
+
+    /** What this end of the doorway sounds like: its TARDIS's exterior's doors outside, its interior's inside. */
+    private DoorSounds doorSounds(ServerLevel level) {
+        TardisRecord record = TardisInteriorManager.get(level.getServer()).get(this.tardisId);
+        if (record == null) {
+            return DoorSounds.IRON_DOOR;
+        }
+        return this.getPortalSide() == PortalSide.EXTERIOR ? record.exterior().doorSounds() : record.interior().doorSounds();
     }
 
     /** Shows the doors fully open, without animating, syncing or playing a sound: for client-side stand-ins. */

@@ -20,6 +20,7 @@ import net.minecraft.resources.Identifier;
 import net.zagdrath.artronindustries.ArtronIndustries;
 import net.zagdrath.artronindustries.portal.PortalShape;
 import net.zagdrath.artronindustries.registry.ArtronSounds;
+import net.zagdrath.artronindustries.tardis.DoorSounds;
 import net.zagdrath.artronindustries.tardis.InteriorGenerator;
 
 /** The interiors a TARDIS can be built with, by id. Saved ids that are no longer known load as {@link #DEFAULT}. */
@@ -37,7 +38,9 @@ public final class TardisInteriors {
      * wall, facing north into the room, drawn as half-block slabs. It hums like the 1996 TARDIS.
      */
     public static final TardisInterior VICTORIAN_PARLOUR = register(TemplateInterior.create(id("victorian_parlour"), id("victorian_parlour"),
-            new BlockPos(12, 2, 38), new BlockPos(15, 5, 39), Direction.NORTH, 0.5F).withHum(ArtronSounds.VICTORIAN_PARLOUR_HUM));
+            new BlockPos(12, 2, 38), new BlockPos(15, 5, 39), Direction.NORTH, 0.5F)
+            .withHum(ArtronSounds.VICTORIAN_PARLOUR_HUM)
+            .withDoorSounds(new DoorSounds(ArtronSounds.VICTORIAN_PARLOUR_DOOR_OPEN, ArtronSounds.VICTORIAN_PARLOUR_DOOR_CLOSE)));
     /** What a new TARDIS gets when nothing else is asked for. */
     public static final TardisInterior DEFAULT = VICTORIAN_PARLOUR;
 

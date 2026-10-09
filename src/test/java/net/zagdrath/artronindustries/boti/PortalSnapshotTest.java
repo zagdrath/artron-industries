@@ -84,7 +84,7 @@ class PortalSnapshotTest {
                 box.index(0, 0, 0), new PortalSnapshot.BlockEntityData(Identifier.withDefaultNamespace("chest"), new CompoundTag()));
         PortalGeometry geometry = new PortalGeometry(new BlockPos(10, 64, 10), Direction.EAST, PortalShape.DEFAULT_DOOR,
                 new BlockPos(4096, 65, 7), Direction.NORTH, new PortalShape(2.0F, 3.0F, 0.0F, 0.25F));
-        PortalEnvironment env = new PortalEnvironment(0x78a7ff, 0xc0d8ff, 192.0F, 0.5F, 0.0F, 123_456L, true, 7,
+        PortalEnvironment env = new PortalEnvironment(0x78a7ff, 0xc0d8ff, 8.0F, 192.0F, 0.5F, 0.0F, 123_456L, true, 7,
                 new PortalEnvironment.Light(0.75F, 0xFFFFFF, 0x0A0B0C, 0xFFD88C),
                 new PortalEnvironment.Sky(12.5F, 192.5F, 12.5F, 0.25F, 3, 0x80ff8040, 0xccffffff, 192.33F, 987_654L));
         PortalViewKey key = new PortalViewKey(UUID.randomUUID(), PortalSide.EXTERIOR);

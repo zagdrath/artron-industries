@@ -115,6 +115,7 @@ public final class SnapshotCapture {
         return new PortalEnvironment(
                 rgb(attributes.getValue(EnvironmentAttributes.SKY_COLOR, pos, null)),
                 rgb(attributes.getValue(EnvironmentAttributes.FOG_COLOR, pos, null)),
+                attributes.getValue(EnvironmentAttributes.FOG_START_DISTANCE, pos, null),
                 attributes.getValue(EnvironmentAttributes.FOG_END_DISTANCE, pos, null),
                 level.getRainLevel(1.0F),
                 level.getThunderLevel(1.0F),

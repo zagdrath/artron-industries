@@ -17,6 +17,7 @@ import net.minecraft.network.codec.StreamCodec;
  *
  * @param skyColor RGB sky colour (already includes time of day and weather)
  * @param fogColor RGB fog colour
+ * @param fogStart environmental fog start distance in blocks
  * @param fogEnd   environmental fog end distance in blocks
  * @param rain     rain level 0..1
  * @param thunder  thunder level 0..1
@@ -26,9 +27,9 @@ import net.minecraft.network.codec.StreamCodec;
  * @param light    how the far side's lightmap turns light levels into colour there
  * @param sky      what is drawn in that sky, or {@code null} for no sky (or no overworld-like skybox)
  */
-public record PortalEnvironment(int skyColor, int fogColor, float fogEnd, float rain, float thunder, long dayTime, boolean hasSky, int biomeId,
+public record PortalEnvironment(int skyColor, int fogColor, float fogStart, float fogEnd, float rain, float thunder, long dayTime, boolean hasSky, int biomeId,
                                 Light light, @Nullable Sky sky) {
-    public static final PortalEnvironment DARK = new PortalEnvironment(0x050508, 0x050508, 64.0F, 0.0F, 0.0F, 0L, false, -1, Light.DEFAULT, null);
+    public static final PortalEnvironment DARK = new PortalEnvironment(0x050508, 0x050508, 0.0F, 64.0F, 0.0F, 0.0F, 0L, false, -1, Light.DEFAULT, null);
 
     /**
      * The far side's lightmap inputs, as its own environment attributes give them at the doorway (the viewer's own
@@ -99,7 +100,7 @@ public record PortalEnvironment(int skyColor, int fogColor, float fogEnd, float 
     public static final StreamCodec<ByteBuf, PortalEnvironment> STREAM_CODEC = new StreamCodec<>() {
         @Override
         public PortalEnvironment decode(ByteBuf buf) {
-            return new PortalEnvironment(buf.readInt(), buf.readInt(), buf.readFloat(), buf.readFloat(), buf.readFloat(),
+            return new PortalEnvironment(buf.readInt(), buf.readInt(), buf.readFloat(), buf.readFloat(), buf.readFloat(), buf.readFloat(),
                     ByteBufCodecs.VAR_LONG.decode(buf), buf.readBoolean(), ByteBufCodecs.VAR_INT.decode(buf), Light.STREAM_CODEC.decode(buf),
                     buf.readBoolean() ? Sky.STREAM_CODEC.decode(buf) : null);
         }
@@ -108,6 +109,7 @@ public record PortalEnvironment(int skyColor, int fogColor, float fogEnd, float 
         public void encode(ByteBuf buf, PortalEnvironment env) {
             buf.writeInt(env.skyColor);
             buf.writeInt(env.fogColor);
+            buf.writeFloat(env.fogStart);
             buf.writeFloat(env.fogEnd);
             buf.writeFloat(env.rain);
             buf.writeFloat(env.thunder);

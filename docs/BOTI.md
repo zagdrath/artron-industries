@@ -58,8 +58,8 @@ backdrop. A view:
 * sends one `BotiDeltaPayload` per check: positions hinted by `BlockEvent.NeighborNotifyEvent` are diffed every
   `boti.blockDeltaInterval` ticks, and a full sweep every `boti.lightDeltaInterval` ticks also catches light, block entity
   data and changes made without neighbour updates (more than a quarter of the box changed → full snapshot instead);
-* refreshes the far-side atmosphere (`PortalEnvironment`: sky/fog colour sampled from environment attributes at the far
-  doorway, rain, thunder, time, biome, and the lightmap inputs: sky light factor and colour, ambient colour, block light
+* refreshes the far-side atmosphere (`PortalEnvironment`: sky/fog colour and fog distances sampled from environment
+  attributes at the far doorway, rain, thunder, time, biome, and the lightmap inputs: sky light factor and colour, ambient colour, block light
   tint) every `boti.headerRefreshInterval` ticks;
 * sends the entities inside the box every `boti.entityUpdateInterval` ticks (vanilla `SynchedEntityData` values when an
   entity is new to the view and once a second);
@@ -136,8 +136,18 @@ when the viewer's is (once a tick) or the far side's light changes, and the bloc
 doorway with no rebuild, moonlight is tinted like vanilla's and a far side without sky light (or with a dim ambient, like
 the Nether) looks as it does there. Block entities and entities seen through a doorway are drawn by vanilla's feature
 renderers, which bind the main lightmap themselves; looking out of a TARDIS (whose dimension has no sky light) their sky
-light is still folded into block light, scaled by the far side's daylight. Looking out, terrain fades into the far side's
-fog colour towards the edge of the box.
+light is still folded into block light, scaled by the far side's daylight.
+
+**The ground to the horizon.** Looking out, the streamed box ends long before vanilla's terrain would, so the ground is
+carried on to the viewer's render distance (at most 256 blocks) by a **skirt** (`SkirtBlockGetter`,
+`BotiMeshBuilder#buildSkirt`): over a box in front of the far doorway like the snapshot's, every column outside the
+snapshot gets the ground of the nearest edge column (its blocks up to the same height; plants, leaves and logs are not
+ground, so a tree at the edge is not drawn out into a wall), meshed with the vanilla renderers like the snapshot itself
+(tint, water and light included), with the sides of steps between columns down to the lowest neighbour. It is built off
+the render thread (about 0.1 s) for each new snapshot or render distance, in 64-block sections that are culled like the
+snapshot's, and drawn with it (opaque layers of both, then the skirt's water, then the box's). The far side is fogged as
+vanilla fogs it: the far side's own environmental fog distances (pulled in by rain the same way) and the viewer's
+render-distance fog, which the skirt reaches, so terrain meets the horizon as it does outside.
 
 **Seamless walk-through** (`SeamlessTransition`). The server announces a crossing (`BotiCrossingPayload`) just before
 moving the player. For that transition only, NeoForge's `RegisterDimensionTransitionScreenEvent` supplies a loading screen
@@ -253,6 +263,15 @@ middle at the quietest point of the cycle, with the first 0.25 s crossfaded with
 recording, so the last sample leads into the first as it did originally. Ogg Vorbis records the exact length, so it decodes
 to exactly that many samples with no padding.
 
+### Door sounds
+
+Each end of the doorway has its own door sounds (`DoorSounds`: open and close), played where that door stands on every
+state change (opening for each leaf, closing once): the exterior's (`TardisExterior#doorSounds`) outside, the interior's
+(`TardisInterior#withDoorSounds`) inside, the vanilla iron door for either that has none. The Hudolin police box and the
+Victorian Parlour use the 1996 TARDIS's: the police box's short latch clunks and the parlour's long interior door
+sequences (about 5 s), cut between the silences around them in a sound-effects compilation, folded to mono (positional
+sounds must be) and levelled to the same peak.
+
 ### Interior templates
 
 Template interiors (`TemplateInterior`) are Sponge schematics (`.schem`, versions 2 and 3, as saved by WorldEdit and
@@ -326,7 +345,8 @@ draw recording 0.02–0.07 ms of CPU per frame for 1–2 doorways.
   renderers that query the level around themselves (rare) see the near side. Name tags face the near-side camera.
 * Weather particles are not drawn through doorways. The outside's sky is drawn through one doorway per frame (the
   nearest looking out); others show the sky → fog gradient backdrop. End and Nether skyboxes are not drawn.
-* Terrain beyond the streamed box (`exteriorSnapshot*`) is not drawn: the view fades into fog at its far end.
+* Terrain beyond the streamed box (`exteriorSnapshot*`) is made up from its edge (the ground skirt): hills, buildings and
+  water beyond it are not there, and changes near the edge only reach the skirt with the next full snapshot.
 * Biome tint is blended over 3×3 columns, not the player's biome blend setting. Cardinal (face) shading uses the default
   profile, even for Nether-like far sides.
 * A player arriving through a doorway is held for the few ticks until its chunk reaches the client (rendering is covered by

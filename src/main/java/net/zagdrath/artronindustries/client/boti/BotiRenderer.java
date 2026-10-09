@@ -94,8 +94,11 @@ import net.zagdrath.artronindustries.portal.PortalSide;
  */
 public final class BotiRenderer {
     private static final ContextKey<List<DoorDraw>> DRAWS = new ContextKey<>(Identifier.fromNamespaceAndPath(ArtronIndustries.MODID, "boti_draws"));
-    private static final ChunkSectionLayer[] LAYERS = {ChunkSectionLayer.SOLID, ChunkSectionLayer.CUTOUT, ChunkSectionLayer.TRANSLUCENT};
+    private static final ChunkSectionLayer[] OPAQUE_LAYERS = {ChunkSectionLayer.SOLID, ChunkSectionLayer.CUTOUT};
+    private static final ChunkSectionLayer[] TRANSLUCENT_LAYER = {ChunkSectionLayer.TRANSLUCENT};
     private static final int QUADS_PER_DOOR = 3;
+    /** Furthest the ground skirt reaches from the far doorway, in blocks. */
+    private static final int MAX_SKIRT_RADIUS = 256;
 
     /** A clip plane everything is in front of. */
     static final Vector3f NO_CLIP = new Vector3f(0.0F, 0.0F, 1.0F);
@@ -131,6 +134,13 @@ public final class BotiRenderer {
         boolean throughOpening;
         /** Mesh sections to draw, nearest first. */
         int[] sections = new int[0];
+        /** Looking out: the ground skirt around the streamed box (see BotiMeshBuilder#buildSkirt), in its own box's space. */
+        @Nullable SnapshotBox skirtBox;
+        @Nullable Matrix4f skirtModel;
+        Vector3f skirtClip = NO_CLIP;
+        @Nullable Vector3f skirtLocalCamera;
+        @Nullable BotiMesh skirt;
+        int[] skirtSections = new int[0];
         /** Fog uniform for everything drawn inside this doorway (fades the far side into its own fog colour). */
         @Nullable GpuBuffer fog;
         int firstQuad;
@@ -352,6 +362,27 @@ public final class BotiRenderer {
         draw.farCamera = nearToFar.apply(camera);
         draw.boxLocalCamera = draw.farCamera.subtract(origin).toVector3f();
         draw.skyToBlock = skyToBlock(level, snapshot.environment());
+        if (draw.key.nearSide() == PortalSide.INTERIOR && !draw.warmOnly) {
+            SnapshotBox skirt = skirtBox(snapshot);
+            Vec3 skirtOrigin = Vec3.atLowerCornerOf(skirt.origin());
+            draw.skirtBox = skirt;
+            draw.skirtModel = boxToCameraRelative(farToNear, skirtOrigin, camera);
+            draw.skirtClip = skirt.clipPlane(geometry.farPos(), geometry.farFacing(), geometry.farShape());
+            draw.skirtLocalCamera = draw.farCamera.subtract(skirtOrigin).toVector3f();
+        }
+    }
+
+    /**
+     * The box the ground skirt fills, looking out of a TARDIS: in front of the far doorway like the snapshot's (and level
+     * with it), reaching the viewer's render distance (where vanilla's fog ends), at most {@link #MAX_SKIRT_RADIUS}.
+     */
+    static SnapshotBox skirtBox(PortalSnapshot snapshot) {
+        PortalGeometry geometry = snapshot.geometry();
+        SnapshotBox box = snapshot.box();
+        int radius = Math.min(Minecraft.getInstance().options.getEffectiveRenderDistance() * 16, MAX_SKIRT_RADIUS);
+        int across = Math.max(box.sizeX(), box.sizeZ());
+        return SnapshotBox.inFrontOf(geometry.farPos(), geometry.farFacing(), geometry.farShape(), Math.max(2 * radius, across + 2), box.sizeY(),
+                Math.max(radius, across));
     }
 
     /** Matrix taking box-local far-side positions to camera-relative near-side positions, built in double precision. */
@@ -407,8 +438,16 @@ public final class BotiRenderer {
                     FOG_BUFFERS.add(draw.fog);
                     draw.lightmap = BotiLightmaps.prepare(draw.view);
                     if (draw.mesh != null) {
-                        draw.sections = visibleSections(draw, draw.mesh);
+                        draw.sections = visibleSections(draw, draw.mesh, draw.model, draw.clip, draw.boxLocalCamera);
                         draw.mesh.resortIfNeeded(draw.boxLocalCamera, draw.sections);
+                    }
+                    if (draw.skirtBox != null && draw.skirtLocalCamera != null && draw.mesh != null) {
+                        draw.skirt = BotiMeshCache.prepareSkirt(draw.view, draw.skirtBox, draw.skirtLocalCamera);
+                        if (draw.skirt != null) {
+                            draw.skirtSections = visibleSections(draw, draw.skirt, draw.skirtModel, draw.skirtClip, draw.skirtLocalCamera);
+                            draw.skirt.resortIfNeeded(draw.skirtLocalCamera, draw.skirtSections);
+                            sequentialIndices = Math.max(sequentialIndices, draw.skirt.maxSequentialIndices());
+                        }
                     }
                 }
                 if (draw.mesh != null) {
@@ -459,27 +498,31 @@ public final class BotiRenderer {
     }
 
     /**
-     * Looking out of a TARDIS, terrain fades into the far side's fog colour towards the far end of the snapshot box, which
-     * hides where the streamed region stops. Looking in, interiors are small enough that no fog is applied.
+     * Looking out of a TARDIS, the far side is fogged the way vanilla fogs it there: the far side's own environmental fog
+     * (its fog distances, pulled in by rain like vanilla's) and the viewer's render-distance fog, which the ground skirt
+     * reaches. Looking in, interiors are small enough that no fog is applied.
      */
     private static GpuBuffer fogBuffer(DoorDraw draw) {
-        PortalSnapshot snapshot = draw.view.snapshot();
-        float start = 1.0E6F;
-        float end = 1.0E6F;
+        PortalEnvironment env = draw.view.snapshot().environment();
+        float envStart = 1.0E6F;
+        float envEnd = 1.0E6F;
+        float distanceStart = 1.0E6F;
+        float distanceEnd = 1.0E6F;
         if (draw.key.nearSide() == PortalSide.INTERIOR && !draw.debugFloating) {
-            SnapshotBox box = snapshot.box();
-            float depth = snapshot.geometry().farFacing().getAxis() == Direction.Axis.X ? box.sizeX() : box.sizeZ();
-            start = depth * 0.55F;
-            end = depth * 0.95F;
+            envStart = env.fogStart() - 160.0F * env.rain();
+            envEnd = Math.max(Math.min(96.0F, env.fogEnd()), env.fogEnd() - 256.0F * env.rain());
+            float renderDistance = Math.min(Minecraft.getInstance().options.getEffectiveRenderDistance() * 16, MAX_SKIRT_RADIUS);
+            distanceStart = renderDistance - Mth.clamp(renderDistance / 10.0F, 4.0F, 64.0F);
+            distanceEnd = renderDistance;
         }
         int c = draw.backdropBottom;
         try (MemoryStack stack = MemoryStack.stackPush()) {
             ByteBuffer data = Std140Builder.onStack(stack, FogRenderer.FOG_UBO_SIZE)
                     .putVec4(((c >> 16) & 0xFF) / 255.0F, ((c >> 8) & 0xFF) / 255.0F, (c & 0xFF) / 255.0F, 1.0F)
-                    .putFloat(start)
-                    .putFloat(end)
-                    .putFloat(1.0E6F)
-                    .putFloat(1.0E6F)
+                    .putFloat(envStart)
+                    .putFloat(envEnd)
+                    .putFloat(distanceStart)
+                    .putFloat(distanceEnd)
                     .putFloat(1.0E6F)
                     .putFloat(1.0E6F)
                     .get();
@@ -492,7 +535,7 @@ public final class BotiRenderer {
      * through a doorway, inside the pyramid from the camera through the open part of the opening. Doorway pairs only turn
      * in quarter turns, so a section's bounds stay axis-aligned on the near side.
      */
-    private static int[] visibleSections(DoorDraw draw, BotiMesh mesh) {
+    private static int[] visibleSections(DoorDraw draw, BotiMesh mesh, @Nullable Matrix4f model, Vector3f clip, @Nullable Vector3f localCamera) {
         SnapshotSections grid = mesh.grid();
         Vector3f[] edges = draw.throughOpening ? openingPlanes(draw.corners) : null;
         Vector3f[] points = new Vector3f[8];
@@ -512,11 +555,10 @@ public final class BotiRenderer {
             float y1 = grid.maxY(section);
             float z1 = grid.maxZ(section);
             // Wholly behind the far doorway plane (box-local; see SnapshotBox#clipPlane).
-            Vector3f clip = draw.clip;
             if (Math.max(clip.x * x0, clip.x * x1) + Math.max(clip.y * z0, clip.y * z1) + clip.z < 0.0F) {
                 continue;
             }
-            if (draw.model != null && (draw.frustum != null || edges != null)) {
+            if (model != null && (draw.frustum != null || edges != null)) {
                 float minX = Float.POSITIVE_INFINITY;
                 float minY = Float.POSITIVE_INFINITY;
                 float minZ = Float.POSITIVE_INFINITY;
@@ -524,7 +566,7 @@ public final class BotiRenderer {
                 float maxY = Float.NEGATIVE_INFINITY;
                 float maxZ = Float.NEGATIVE_INFINITY;
                 for (int i = 0; i < 8; i++) {
-                    Vector3f p = draw.model.transformPosition((i & 1) == 0 ? x0 : x1, (i & 2) == 0 ? y0 : y1, (i & 4) == 0 ? z0 : z1, points[i]);
+                    Vector3f p = model.transformPosition((i & 1) == 0 ? x0 : x1, (i & 2) == 0 ? y0 : y1, (i & 4) == 0 ? z0 : z1, points[i]);
                     minX = Math.min(minX, p.x);
                     minY = Math.min(minY, p.y);
                     minZ = Math.min(minZ, p.z);
@@ -542,10 +584,10 @@ public final class BotiRenderer {
                     continue;
                 }
             }
-            if (draw.boxLocalCamera != null) {
-                float dx = (x0 + x1) * 0.5F - draw.boxLocalCamera.x;
-                float dy = (y0 + y1) * 0.5F - draw.boxLocalCamera.y;
-                float dz = (z0 + z1) * 0.5F - draw.boxLocalCamera.z;
+            if (localCamera != null) {
+                float dx = (x0 + x1) * 0.5F - localCamera.x;
+                float dy = (y0 + y1) * 0.5F - localCamera.y;
+                float dz = (z0 + z1) * 0.5F - localCamera.z;
                 distance[section] = dx * dx + dy * dy + dz * dz;
             }
             visible.add(section);
@@ -751,10 +793,11 @@ public final class BotiRenderer {
                 continue;
             }
             drawn++;
-            sections += draw.sections.length;
+            sections += draw.sections.length + draw.skirtSections.length;
             pass.pushDebugGroup(() -> "BOTI " + draw.key);
             if (draw.debugFloating) {
-                drawMesh(pass, draw, view, sequential, indices.type(), mc, true);
+                drawMesh(pass, draw, draw.mesh, draw.model, draw.clip, draw.sections, OPAQUE_LAYERS, view, sequential, indices.type(), mc, true);
+                drawMesh(pass, draw, draw.mesh, draw.model, draw.clip, draw.sections, TRANSLUCENT_LAYER, view, sequential, indices.type(), mc, true);
                 if (draw.ownsBlockEntities && featureFrame != null) {
                     featureFrame.executeSolid(pass);
                     featureFrame.executeTranslucent(pass);
@@ -784,7 +827,12 @@ public final class BotiRenderer {
             if (draw.fog != null) {
                 pass.setUniform("Fog", draw.fog.slice());
             }
-            drawMesh(pass, draw, view, sequential, indices.type(), mc, false);
+            // The skirt lies around the box, so its water is drawn before the box's.
+            drawMesh(pass, draw, draw.skirt, draw.skirtModel, draw.skirtClip, draw.skirtSections, OPAQUE_LAYERS, view, sequential, indices.type(), mc, false);
+            drawMesh(pass, draw, draw.mesh, draw.model, draw.clip, draw.sections, OPAQUE_LAYERS, view, sequential, indices.type(), mc, false);
+            drawMesh(pass, draw, draw.skirt, draw.skirtModel, draw.skirtClip, draw.skirtSections, TRANSLUCENT_LAYER, view, sequential, indices.type(), mc,
+                    false);
+            drawMesh(pass, draw, draw.mesh, draw.model, draw.clip, draw.sections, TRANSLUCENT_LAYER, view, sequential, indices.type(), mc, false);
             if (draw.ownsBlockEntities && featureFrame != null) {
                 RenderSystem.pushPipelineModifier(BotiPipelines.INSIDE_DOORWAY);
                 try {
@@ -816,20 +864,20 @@ public final class BotiRenderer {
         pass.drawIndexed(6, 1, 0, quad * 4, 0);
     }
 
-    private static void drawMesh(RenderPass pass, DoorDraw draw, Matrix4fc view, GpuBuffer sequential,
+    /** Draws {@code layers} of the {@code sections} of {@code mesh} (nearest first), placed by {@code model}. */
+    private static void drawMesh(RenderPass pass, DoorDraw draw, @Nullable BotiMesh mesh, @Nullable Matrix4f model, Vector3f clip, int[] sections,
+                                 ChunkSectionLayer[] layers, Matrix4fc view, GpuBuffer sequential,
                                  com.mojang.renderpearl.api.pipeline.IndexType sequentialType, Minecraft mc, boolean debug) {
-        BotiMesh mesh = draw.mesh;
-        if (mesh == null || mesh.isEmpty() || draw.model == null) {
+        if (mesh == null || mesh.isEmpty() || model == null || sections.length == 0) {
             return;
         }
         // The block shader reads the clip plane from ModelOffset, which it has no other use for.
-        GpuBufferSlice transforms = RenderSystem.getDynamicUniforms().writeTransform(new Matrix4f(view), new Vector4f(1.0F), new Vector3f(draw.clip), draw.model);
+        GpuBufferSlice transforms = RenderSystem.getDynamicUniforms().writeTransform(new Matrix4f(view), new Vector4f(1.0F), new Vector3f(clip), model);
         pass.setUniform("Sampler0", mc.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS).getTextureView(),
                 RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST, true));
         pass.setUniform("Sampler2", draw.lightmap != null ? draw.lightmap : mc.gameRenderer.lightmap(),
                 RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
-        int[] sections = draw.sections;
-        for (ChunkSectionLayer layer : LAYERS) {
+        for (ChunkSectionLayer layer : layers) {
             RenderPipeline pipeline = switch (layer) {
                 case SOLID -> debug ? BotiPipelines.DEBUG_BLOCK_SOLID : BotiPipelines.BLOCK_SOLID;
                 case CUTOUT -> debug ? BotiPipelines.DEBUG_BLOCK_CUTOUT : BotiPipelines.BLOCK_CUTOUT;
