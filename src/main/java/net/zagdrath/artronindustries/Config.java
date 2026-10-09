@@ -49,24 +49,24 @@ public class Config {
     /** Interior box seen through the exterior door: width (across the door), height and depth (behind the interior door). */
     public static final ModConfigSpec.IntValue INTERIOR_SNAPSHOT_WIDTH = BUILDER
             .comment("Width (across the doorway) of the interior region streamed to players looking in from outside.")
-            .defineInRange("interiorSnapshotWidth", 24, 4, 96);
+            .defineInRange("interiorSnapshotWidth", 48, 4, 128);
     public static final ModConfigSpec.IntValue INTERIOR_SNAPSHOT_HEIGHT = BUILDER
             .comment("Height of the interior region streamed to players looking in from outside.")
-            .defineInRange("interiorSnapshotHeight", 16, 4, 96);
+            .defineInRange("interiorSnapshotHeight", 24, 4, 128);
     public static final ModConfigSpec.IntValue INTERIOR_SNAPSHOT_DEPTH = BUILDER
             .comment("Depth (away from the interior door) of the interior region streamed to players looking in from outside.")
-            .defineInRange("interiorSnapshotDepth", 24, 4, 96);
+            .defineInRange("interiorSnapshotDepth", 48, 4, 128);
 
     /** Exterior box seen through the interior door. */
     public static final ModConfigSpec.IntValue EXTERIOR_SNAPSHOT_WIDTH = BUILDER
             .comment("Width (across the doorway) of the outside region streamed to players looking out from the interior.")
-            .defineInRange("exteriorSnapshotWidth", 40, 4, 128);
+            .defineInRange("exteriorSnapshotWidth", 64, 4, 192);
     public static final ModConfigSpec.IntValue EXTERIOR_SNAPSHOT_HEIGHT = BUILDER
             .comment("Height of the outside region streamed to players looking out from the interior.")
-            .defineInRange("exteriorSnapshotHeight", 24, 4, 128);
+            .defineInRange("exteriorSnapshotHeight", 32, 4, 128);
     public static final ModConfigSpec.IntValue EXTERIOR_SNAPSHOT_DEPTH = BUILDER
             .comment("Depth (away from the exterior door) of the outside region streamed to players looking out.")
-            .defineInRange("exteriorSnapshotDepth", 40, 4, 128);
+            .defineInRange("exteriorSnapshotDepth", 64, 4, 192);
 
     /** Players within this distance of an open door's plane (and in front of it) receive its far-side view. */
     public static final ModConfigSpec.IntValue WATCH_RADIUS = BUILDER

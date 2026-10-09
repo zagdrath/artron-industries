@@ -70,7 +70,7 @@ backdrop. A view:
 indices (`PalettedInts`, no value straddles a long); one byte of packed block/sky light per block; one biome id per
 column; NBT of block entities whose type is in the tag `artronindustries:boti_render_block_entities`. The box starts at the
 first block layer fully in front of the far doorway plane, so nothing behind the far door can appear in front of the near
-doorway. Typical sizes: interior 24×16×24 ≈ 15 KB, exterior 40×24×40 ≈ 58 KB.
+doorway. Typical sizes: interior 24×16×24 ≈ 15 KB, exterior 40×24×40 ≈ 58 KB (the defaults are now 48×24×48 and 64×32×64).
 
 **Walk-through** (`DoorwayCrossing`): each tick, entities within 3 blocks of an open doorway plane are tracked; going from
 in front of the plane to behind it, inside the opening, while the door is at least half open, moves the entity to the other
@@ -162,8 +162,8 @@ by the server):
 | `tardis.cellSpacing` | 4096 | Blocks between interior cells (new TARDISes only). |
 | `tardis.interiorY` | 64 | Floor height of interiors. |
 | `tardis.reuseDeletedCells` | false | Reuse cells of deleted TARDISes. |
-| `boti.interiorSnapshotWidth/Height/Depth` | 24/16/24 | Interior box streamed to viewers outside. |
-| `boti.exteriorSnapshotWidth/Height/Depth` | 40/24/40 | Outside box streamed to viewers inside. |
+| `boti.interiorSnapshotWidth/Height/Depth` | 48/24/48 | Interior box streamed to viewers outside. |
+| `boti.exteriorSnapshotWidth/Height/Depth` | 64/32/64 | Outside box streamed to viewers inside. |
 | `boti.watchRadius` | 32 | Distance at which players start receiving a view. |
 | `boti.watcherScanInterval` | 5 | Ticks between watcher re-evaluations. |
 | `boti.blockDeltaInterval` | 1 | Ticks between block delta checks. |

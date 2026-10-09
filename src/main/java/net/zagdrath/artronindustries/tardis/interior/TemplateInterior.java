@@ -45,10 +45,10 @@ public final class TemplateInterior implements TardisInterior.Generator {
      * @param doorwayFrom one corner of the doorway box, in schematic coordinates
      * @param doorwayTo   the opposite corner
      * @param facing      the way the door faces, into the room
-     * @param planeDepth  how far behind the front of the box the doorway plane and the hinges are
+     * @param thickness   how thick the leaves are drawn, in blocks (the back layer of the box, squashed from its front)
      */
-    public static TardisInterior create(Identifier id, Identifier template, BlockPos doorwayFrom, BlockPos doorwayTo, Direction facing, float planeDepth) {
-        InteriorDoorway.Placed doorway = InteriorDoorway.fromBox(doorwayFrom, doorwayTo, facing, planeDepth);
+    public static TardisInterior create(Identifier id, Identifier template, BlockPos doorwayFrom, BlockPos doorwayTo, Direction facing, float thickness) {
+        InteriorDoorway.Placed doorway = InteriorDoorway.fromBox(doorwayFrom, doorwayTo, facing, thickness);
         return new TardisInterior(id, doorway.master(), facing, doorway.doorway().shape(), new TemplateInterior(template, doorway, facing));
     }
 
@@ -66,9 +66,11 @@ public final class TemplateInterior implements TardisInterior.Generator {
                 level.getChunk(cx, cz);
             }
         }
-        // The build is placed as saved: no shape updates, so walls, fences and panes keep the connections they were built with.
+        // The build is placed exactly as saved: no shape updates at all (not even on neighbours as each block goes in), so
+        // walls, fences and panes keep the connections they were built with and buttons or levers on blocks that would not
+        // normally hold them stay put.
         StructurePlaceSettings settings = new StructurePlaceSettings().setKnownShape(true);
-        structure.placeInWorld(level, origin, origin, settings, level.getRandom(), Block.UPDATE_CLIENTS);
+        structure.placeInWorld(level, origin, origin, settings, level.getRandom(), Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
         InteriorDoorwayBlock.build(level, record, origin.offset(this.doorway.master()), this.facing, this.doorway.doorway());
     }
 

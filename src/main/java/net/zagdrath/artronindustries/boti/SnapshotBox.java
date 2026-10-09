@@ -26,12 +26,14 @@ public record SnapshotBox(BlockPos origin, int sizeX, int sizeY, int sizeZ) {
             SnapshotBox::new);
 
     /**
-     * The box in front of a door (on its {@code facing} side). It starts at the first block layer entirely in front of the
-     * doorway plane, so nothing behind the far door can ever be drawn in front of the near doorway. A quarter of the
-     * height lies below the bottom of the opening so floors are visible.
+     * The box in front of a door (on its {@code facing} side). It starts at the block layer the doorway plane passes
+     * through, so blocks right at the doorway (the ground in front of an exterior whose doors are set back into the
+     * block) are there; whatever of that layer is behind the plane is cut away when drawn ({@link #clipPlane}), so nothing
+     * behind the far door is ever drawn in front of the near doorway. A quarter of the height lies below the bottom of the
+     * opening so floors are visible.
      */
     public static SnapshotBox inFrontOf(BlockPos doorPos, Direction facing, PortalShape shape, int width, int height, int depth) {
-        int firstLayer = (int) Math.ceil(shape.planeOffset() + 0.5F - 1.0E-4F);
+        int firstLayer = (int) Math.floor(shape.planeOffset() + 0.5F + 1.0E-4F);
         BlockPos start = doorPos.relative(facing, firstLayer);
         BlockPos end = start.relative(facing, depth - 1);
         Direction right = PortalShape.right(facing);
@@ -44,6 +46,17 @@ public record SnapshotBox(BlockPos origin, int sizeX, int sizeY, int sizeZ) {
         int sizeX = Math.abs(a.getX() - b.getX()) + 1;
         int sizeZ = Math.abs(a.getZ() - b.getZ()) + 1;
         return new SnapshotBox(new BlockPos(minX, bottom, minZ), sizeX, height, sizeZ);
+    }
+
+    /**
+     * The doorway plane of the door this box is in front of, in box-local space, as (normal x, normal z, offset): a point
+     * {@code p} is in front of it when {@code x * p.x + y * p.z + z >= 0}.
+     */
+    public org.joml.Vector3f clipPlane(BlockPos doorPos, Direction facing, PortalShape shape) {
+        net.minecraft.world.phys.Vec3 anchor = shape.anchor(doorPos, facing);
+        double ax = anchor.x - this.origin.getX();
+        double az = anchor.z - this.origin.getZ();
+        return new org.joml.Vector3f(facing.getStepX(), facing.getStepZ(), (float) -(ax * facing.getStepX() + az * facing.getStepZ()));
     }
 
     public int volume() {

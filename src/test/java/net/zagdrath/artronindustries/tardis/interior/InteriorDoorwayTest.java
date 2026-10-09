@@ -27,14 +27,15 @@ class InteriorDoorwayTest {
     /** The Victorian Parlour's door: gray leaves at z 39 with buttons in front at z 38, facing north. */
     @Test
     void parlourDoorway() {
-        InteriorDoorway.Placed placed = InteriorDoorway.fromBox(new BlockPos(12, 2, 38), new BlockPos(15, 5, 39), Direction.NORTH, 1.0F);
+        InteriorDoorway.Placed placed = InteriorDoorway.fromBox(new BlockPos(12, 2, 38), new BlockPos(15, 5, 39), Direction.NORTH, 0.5F);
         InteriorDoorway doorway = placed.doorway();
         // Seen from the room (looking south), left is east: the master is the front bottom east cell.
         assertEquals(new BlockPos(15, 2, 38), placed.master());
-        assertEquals(new InteriorDoorway(4, 4, 2, 1.0F), doorway);
+        assertEquals(new InteriorDoorway(4, 4, 2, 0.5F), doorway);
 
+        // The plane is just behind the half-block leaves, which start at the front of the gray blocks (z 39).
         Vec3 anchor = doorway.shape().anchor(placed.master(), Direction.NORTH);
-        assertTrue(anchor.distanceTo(new Vec3(14.0, 2.0, 39.0)) < EPS, () -> "anchor " + anchor);
+        assertTrue(anchor.distanceTo(new Vec3(14.0, 2.0, 39.5 + InteriorDoorway.PLANE_GAP)) < EPS, () -> "anchor " + anchor);
         assertEquals(4.0F, doorway.shape().width());
         assertEquals(4.0F, doorway.shape().height());
 
@@ -48,7 +49,7 @@ class InteriorDoorwayTest {
     void cellsFillTheBox(Direction facing) {
         BlockPos a = new BlockPos(-3, 7, 10);
         BlockPos b = facing.getAxis() == Direction.Axis.Z ? a.offset(2, 3, 1) : a.offset(1, 3, 2);
-        InteriorDoorway.Placed placed = InteriorDoorway.fromBox(a, b, facing, 0.5F);
+        InteriorDoorway.Placed placed = InteriorDoorway.fromBox(a, b, facing, 0.25F);
         InteriorDoorway doorway = placed.doorway();
         assertEquals(3, doorway.width());
         assertEquals(2, doorway.depth());
@@ -63,10 +64,10 @@ class InteriorDoorwayTest {
         BlockPos.betweenClosed(a, b).forEach(p -> box.add(p.immutable()));
         assertEquals(box, cells);
         assertFalse(doorway.contains(placed.master(), facing, placed.master().relative(facing)));
-        // The opening is centred on the box and its plane is half a block behind the front.
+        // The opening is centred on the box and its plane is just behind the (quarter-block) leaves in the back layer.
         Vec3 anchor = doorway.shape().anchor(placed.master(), facing);
         Vec3 centre = Vec3.atLowerCornerOf(BlockPos.min(a, b)).add(Vec3.atLowerCornerOf(BlockPos.max(a, b).offset(1, 0, 1))).scale(0.5);
-        Vec3 front = centre.add(Vec3.atLowerCornerOf(facing.getUnitVec3i()).scale(doorway.depth() / 2.0 - 0.5));
+        Vec3 front = centre.add(Vec3.atLowerCornerOf(facing.getUnitVec3i()).scale(doorway.depth() / 2.0 - (1.0 + 0.25 + InteriorDoorway.PLANE_GAP)));
         assertTrue(anchor.distanceTo(new Vec3(front.x, a.getY(), front.z)) < EPS, () -> facing + ": anchor " + anchor + ", expected " + front);
     }
 

@@ -85,6 +85,8 @@ public class InteriorDoorwayRenderer implements BlockEntityRenderer<InteriorDoor
         float rightAngle = -sign * OPEN_DEGREES * ease(door.leafOpenAmount(false, partialTicks));
         Matrix4f leftHinge = hingeTurn(doorway.hinge(true), plane, right, facing, leftAngle);
         Matrix4f rightHinge = hingeTurn(doorway.hinge(false), plane, right, facing, rightAngle);
+        // The leaves themselves are squashed towards their front face to the doorway's leaf thickness.
+        Matrix4f squash = squash(0.5F - doorway.leafFront(), facing, doorway.thickness());
         ClientLevel level = door.getLevel() instanceof ClientLevel clientLevel ? clientLevel : null;
         BlockPos master = door.getBlockPos();
         for (int index = 0; index < leaves.size(); index++) {
@@ -93,8 +95,11 @@ public class InteriorDoorwayRenderer implements BlockEntityRenderer<InteriorDoor
                 continue;
             }
             BlockPos pos = doorway.cell(master, facing, index);
-            Matrix4f pose = new Matrix4f(doorway.inLeftLeaf(doorway.i(index)) ? leftHinge : rightHinge)
-                    .translate(pos.getX() - master.getX(), pos.getY() - master.getY(), pos.getZ() - master.getZ());
+            Matrix4f pose = new Matrix4f(doorway.inLeftLeaf(doorway.i(index)) ? leftHinge : rightHinge);
+            if (doorway.isLeafLayer(doorway.d(index))) {
+                pose.mul(squash);
+            }
+            pose.translate(pos.getX() - master.getX(), pos.getY() - master.getY(), pos.getZ() - master.getZ());
             LitBlock lit = new LitBlock();
             lit.blockPos = pos;
             lit.randomSeedPos = pos;
@@ -112,6 +117,15 @@ public class InteriorDoorwayRenderer implements BlockEntityRenderer<InteriorDoor
         float x = 0.5F + right.getStepX() * alongRight + facing.getStepX() * alongFacing;
         float z = 0.5F + right.getStepZ() * alongRight + facing.getStepZ() * alongFacing;
         return new Matrix4f().translate(x, 0.0F, z).rotate(Axis.YP.rotationDegrees(degrees)).translate(-x, 0.0F, -z);
+    }
+
+    /** Scales by {@code factor} along {@code facing} about the plane {@code alongFacing} from the master cell's centre. */
+    private static Matrix4f squash(float alongFacing, Direction facing, float factor) {
+        float x = 0.5F + facing.getStepX() * alongFacing;
+        float z = 0.5F + facing.getStepZ() * alongFacing;
+        float sx = facing.getAxis() == Direction.Axis.X ? factor : 1.0F;
+        float sz = facing.getAxis() == Direction.Axis.Z ? factor : 1.0F;
+        return new Matrix4f().translate(x, 0.0F, z).scale(sx, 1.0F, sz).translate(-x, 0.0F, -z);
     }
 
     @Override

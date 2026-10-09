@@ -97,6 +97,9 @@ public final class BotiRenderer {
     private static final double FULLSCREEN_BEHIND = 1.5;
 
     /** Everything needed to draw one doorway this frame. */
+    /** A clip plane everything is in front of. */
+    static final Vector3f NO_CLIP = new Vector3f(0.0F, 0.0F, 1.0F);
+
     static final class DoorDraw {
         final PortalViewKey key;
         final BotiClientCache.@Nullable View view;
@@ -105,6 +108,8 @@ public final class BotiRenderer {
         final boolean fallback;
         final boolean debugFloating;
         @Nullable Matrix4f model;
+        /** The far doorway plane in box-local space (see SnapshotBox#clipPlane); nothing behind it is drawn. */
+        Vector3f clip = NO_CLIP;
         @Nullable Vector3f boxLocalCamera;
         @Nullable Vec3 farCamera;
         int backdropTop;
@@ -319,6 +324,7 @@ public final class BotiRenderer {
         SnapshotBox box = snapshot.box();
         Vec3 origin = Vec3.atLowerCornerOf(box.origin());
         draw.model = boxToCameraRelative(farToNear, origin, camera);
+        draw.clip = box.clipPlane(geometry.farPos(), geometry.farFacing(), geometry.farShape());
         draw.farCamera = nearToFar.apply(camera);
         draw.boxLocalCamera = draw.farCamera.subtract(origin).toVector3f();
         draw.skyToBlock = skyToBlock(level, snapshot.environment());
@@ -661,7 +667,8 @@ public final class BotiRenderer {
         if (mesh == null || mesh.isEmpty() || draw.model == null) {
             return;
         }
-        GpuBufferSlice transforms = RenderSystem.getDynamicUniforms().writeTransform(new Matrix4f(view), new Vector4f(1.0F), new Vector3f(), draw.model);
+        // The block shader reads the clip plane from ModelOffset, which it has no other use for.
+        GpuBufferSlice transforms = RenderSystem.getDynamicUniforms().writeTransform(new Matrix4f(view), new Vector4f(1.0F), new Vector3f(draw.clip), draw.model);
         pass.setUniform("Sampler0", mc.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS).getTextureView(),
                 RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST, true));
         pass.setUniform("Sampler2", mc.gameRenderer.lightmap(), RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));

@@ -33,10 +33,10 @@ public final class TardisInteriors {
             new BlockPos(0, 1, InteriorGenerator.HALF + 1), Direction.NORTH, PortalShape.DEFAULT_DOOR, InteriorGenerator::generate));
     /**
      * The Victorian Parlour. Its door is the 4x4 pair of gray leaves (with their button panelling in front) in the south
-     * wall, facing north into the room; the doorway plane is the front of the gray blocks.
+     * wall, facing north into the room, drawn as half-block slabs.
      */
     public static final TardisInterior VICTORIAN_PARLOUR = register(TemplateInterior.create(id("victorian_parlour"), id("victorian_parlour"),
-            new BlockPos(12, 2, 38), new BlockPos(15, 5, 39), Direction.NORTH, 1.0F));
+            new BlockPos(12, 2, 38), new BlockPos(15, 5, 39), Direction.NORTH, 0.5F));
     /** What a new TARDIS gets when nothing else is asked for. */
     public static final TardisInterior DEFAULT = VICTORIAN_PARLOUR;
 
