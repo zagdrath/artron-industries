@@ -40,7 +40,8 @@ public final class TardisInteriors {
     public static final TardisInterior VICTORIAN_PARLOUR = register(TemplateInterior.create(id("victorian_parlour"), id("victorian_parlour"),
             new BlockPos(12, 2, 38), new BlockPos(15, 5, 39), Direction.NORTH, 0.5F)
             .withHum(ArtronSounds.VICTORIAN_PARLOUR_HUM)
-            .withDoorSounds(new DoorSounds(ArtronSounds.VICTORIAN_PARLOUR_DOOR_OPEN, ArtronSounds.VICTORIAN_PARLOUR_DOOR_CLOSE)));
+            // The doors take as long to swing as their sounds last: 2.5 s.
+            .withDoorSounds(new DoorSounds(ArtronSounds.VICTORIAN_PARLOUR_DOOR_OPEN, ArtronSounds.VICTORIAN_PARLOUR_DOOR_CLOSE, 50)));
     /** What a new TARDIS gets when nothing else is asked for. */
     public static final TardisInterior DEFAULT = VICTORIAN_PARLOUR;
 

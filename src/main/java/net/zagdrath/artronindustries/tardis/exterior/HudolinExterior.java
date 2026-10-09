@@ -51,7 +51,8 @@ public final class HudolinExterior extends TardisExterior {
     private static final Map<DoorState, Map<Direction, VoxelShape>>[] OUTLINE = shapes(false);
     private static final Map<DoorState, Map<Direction, VoxelShape>>[] COLLISION = shapes(true);
 
-    private static final DoorSounds SOUNDS = new DoorSounds(ArtronSounds.HUDOLIN_DOOR_OPEN, ArtronSounds.HUDOLIN_DOOR_CLOSE);
+    private static final DoorSounds SOUNDS = new DoorSounds(ArtronSounds.HUDOLIN_DOOR_OPEN, ArtronSounds.HUDOLIN_DOOR_CLOSE,
+            DoorSounds.DEFAULT_SWING_TICKS);
 
     HudolinExterior(Identifier id) {
         super(id);

@@ -48,6 +48,8 @@ public final class ClientSmokeTest {
     private final List<Step> steps = new ArrayList<>();
     private int index;
     private int wait = 40;
+    /** Ticks the parlour's doors take to swing; shots part-way through wait half of it. */
+    private static final int PARLOUR_SWING = TardisInteriors.VICTORIAN_PARLOUR.doorSounds().swingTicks();
     private int timeout = 600;
     private boolean started;
     private @Nullable TardisRecord record;
@@ -357,10 +359,10 @@ public final class ClientSmokeTest {
         this.step("parlour_shut_shot", () -> shot("parlour_shut"), () -> TardisInteriorManager.isInterior(Minecraft.getInstance().level)
                 && Minecraft.getInstance().levelRenderer.hasRenderedAllSections(), 60);
         this.step("parlour_right", () -> onServer(server -> TardisInteriorManager.get(server).setDoorState(server, this.parlour, DoorState.RIGHT_OPEN)), null, 0);
-        this.step("parlour_opening_shot", () -> shot("parlour_opening"), null, 5);
-        this.step("parlour_right_shot", () -> shot("parlour_right_open"), () -> viewReady(this.parlour, PortalSide.INTERIOR), 30);
+        this.step("parlour_opening_shot", () -> shot("parlour_opening"), null, PARLOUR_SWING / 2);
+        this.step("parlour_right_shot", () -> shot("parlour_right_open"), () -> viewReady(this.parlour, PortalSide.INTERIOR), PARLOUR_SWING / 2 + 5);
         this.step("parlour_both", () -> onServer(server -> TardisInteriorManager.get(server).setDoorState(server, this.parlour, DoorState.BOTH_OPEN)), null, 0);
-        this.step("parlour_open_shot", () -> shot("parlour_open"), () -> viewReady(this.parlour, PortalSide.INTERIOR), 30);
+        this.step("parlour_open_shot", () -> shot("parlour_open"), () -> viewReady(this.parlour, PortalSide.INTERIOR), PARLOUR_SWING + 5);
         // Looking up and out through the open doors: the outside's clouds by day, its moon and stars by night.
         this.step("parlour_sky", () -> onServer(server -> {
             Vec3 inDoor = this.parlourDoor();
@@ -394,10 +396,10 @@ public final class ClientSmokeTest {
                 && !TardisInteriorManager.isInterior(Minecraft.getInstance().level), 60);
         // From outside, part-way through opening and closing: the parlour's own doors must never fill the doorway.
         this.step("parlour_shut_again", () -> onServer(server -> TardisInteriorManager.get(server).setDoorState(server, this.parlour, DoorState.CLOSED)), null, 0);
-        this.step("parlour_reopen", () -> onServer(server -> TardisInteriorManager.get(server).setDoorState(server, this.parlour, DoorState.BOTH_OPEN)), null, 40);
-        this.step("parlour_outside_opening_shot", () -> shot("parlour_outside_opening"), null, 4);
-        this.step("parlour_reclose", () -> onServer(server -> TardisInteriorManager.get(server).setDoorState(server, this.parlour, DoorState.CLOSED)), null, 40);
-        this.step("parlour_outside_closing_shot", () -> shot("parlour_outside_closing"), null, 4);
+        this.step("parlour_reopen", () -> onServer(server -> TardisInteriorManager.get(server).setDoorState(server, this.parlour, DoorState.BOTH_OPEN)), null, PARLOUR_SWING + 5);
+        this.step("parlour_outside_opening_shot", () -> shot("parlour_outside_opening"), null, PARLOUR_SWING / 2);
+        this.step("parlour_reclose", () -> onServer(server -> TardisInteriorManager.get(server).setDoorState(server, this.parlour, DoorState.CLOSED)), null, PARLOUR_SWING + 5);
+        this.step("parlour_outside_closing_shot", () -> shot("parlour_outside_closing"), null, PARLOUR_SWING / 2);
         // The police box's lit windows at night, doors shut.
         this.step("exterior_night", () -> onServer(server -> {
             server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "time set 18000");
@@ -420,7 +422,7 @@ public final class ClientSmokeTest {
                     inDoor.add(this.parlourFacing().scale(20.0)));
         }), null, 0);
         this.step("parlour_back_ready", () -> {}, () -> TardisInteriorManager.isInterior(Minecraft.getInstance().level)
-                && Minecraft.getInstance().levelRenderer.hasRenderedAllSections(), 40);
+                && Minecraft.getInstance().levelRenderer.hasRenderedAllSections(), PARLOUR_SWING + 5);
         for (int i = 0; i < 24; i++) {
             String name = String.format("parlour_back_out_%02d", i);
             this.step(name, () -> {

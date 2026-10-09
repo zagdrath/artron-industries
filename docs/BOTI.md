@@ -265,12 +265,19 @@ to exactly that many samples with no padding.
 
 ### Door sounds
 
-Each end of the doorway has its own door sounds (`DoorSounds`: open and close), played where that door stands on every
-state change (opening for each leaf, closing once): the exterior's (`TardisExterior#doorSounds`) outside, the interior's
-(`TardisInterior#withDoorSounds`) inside, the vanilla iron door for either that has none. The Hudolin police box and the
-Victorian Parlour use the 1996 TARDIS's: the police box's short latch clunks and the parlour's long interior door
-sequences (about 5 s), cut between the silences around them in a sound-effects compilation, folded to mono (positional
-sounds must be) and levelled to the same peak.
+Each end of the doorway has its own door sounds (`DoorSounds`: open, close and `swingTicks`), played where that door
+stands on every state change (opening for each leaf, closing once): the exterior's (`TardisExterior#doorSounds`) outside,
+the interior's (`TardisInterior#withDoorSounds`) inside, the vanilla iron door for either that has none. The door's leaves
+swing for `swingTicks`, which is how long its sounds last, so the sound starts and stops with the movement; the door
+block entity takes it from its side's sounds on the server, saves it and syncs it, so the server's walk-through checks
+(passable at half open) and the client's animation agree. Doors with no sounds of their own swing in 10 ticks.
+
+The Hudolin police box and the Victorian Parlour use the 1996 TARDIS's, cut between the silences around them in a
+sound-effects compilation, folded to mono (positional sounds must be) and levelled to the same peak: the police box's
+short latch clunks (0.38 s and 0.34 s; its doors swing in 10 ticks), and the parlour's interior doors, which swing in
+50 ticks (2.5 s). Their recordings are about 5 s long, so each was cut to exactly 2.5 s (110,250 samples at 44.1 kHz)
+by keeping its start and its natural run-down and removing part of the steady middle, joined with a 0.2 s equal-power
+crossfade at the point where the two sides line up best.
 
 ### Interior templates
 

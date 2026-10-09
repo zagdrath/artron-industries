@@ -44,31 +44,30 @@ import net.zagdrath.artronindustries.tardis.TardisRecord;
  * locally. Single doors open with the right leaf.
  */
 public abstract class PortalDoorBlockEntity extends BlockEntity implements PortalEndpoint {
-    /** Ticks a full open or close animation takes. */
-    public static final int OPEN_TICKS = 10;
-
     private @Nullable UUID tardisId;
     private DoorState doorState = DoorState.CLOSED;
+    /** Ticks a leaf takes to swing fully open or shut: as long as this end's door sounds last (DoorSounds). Synced. */
+    private int swingTicks = DoorSounds.DEFAULT_SWING_TICKS;
     private final Leaf right = new Leaf();
     private final Leaf left = new Leaf();
     private boolean animationPrimed;
 
-    /** Open animation of one door leaf, in ticks. */
+    /** Open animation of one door leaf, in ticks out of {@code swing}. */
     private static final class Leaf {
         int ticks;
         int prevTicks;
 
-        void tick(boolean open) {
-            this.prevTicks = this.ticks;
-            this.ticks = Mth.clamp(this.ticks + (open ? 1 : -1), 0, OPEN_TICKS);
+        void tick(boolean open, int swing) {
+            this.prevTicks = Math.min(this.ticks, swing);
+            this.ticks = Mth.clamp(this.ticks + (open ? 1 : -1), 0, swing);
         }
 
-        void snap(boolean open) {
-            this.ticks = this.prevTicks = open ? OPEN_TICKS : 0;
+        void snap(boolean open, int swing) {
+            this.ticks = this.prevTicks = open ? swing : 0;
         }
 
-        float amount(float partialTick) {
-            return Mth.lerp(partialTick, this.prevTicks, this.ticks) / OPEN_TICKS;
+        float amount(float partialTick, int swing) {
+            return Math.min(Mth.lerp(partialTick, this.prevTicks, this.ticks) / swing, 1.0F);
         }
     }
 
@@ -77,8 +76,8 @@ public abstract class PortalDoorBlockEntity extends BlockEntity implements Porta
     }
 
     public void tick() {
-        this.right.tick(this.doorState.rightOpen());
-        this.left.tick(this.doorState.leftOpen());
+        this.right.tick(this.doorState.rightOpen(), this.swingTicks);
+        this.left.tick(this.doorState.leftOpen(), this.swingTicks);
     }
 
     /**
@@ -101,6 +100,9 @@ public abstract class PortalDoorBlockEntity extends BlockEntity implements Porta
     /** Links this door to a TARDIS. Server only. */
     public void link(@Nullable UUID tardis, DoorState state) {
         this.tardisId = tardis;
+        if (this.level instanceof ServerLevel serverLevel) {
+            this.swingTicks = this.doorSounds(serverLevel).swingTicks();
+        }
         this.setDoorStateFromManager(state);
         this.sync();
     }
@@ -114,6 +116,7 @@ public abstract class PortalDoorBlockEntity extends BlockEntity implements Porta
         this.doorState = state;
         if (this.level instanceof ServerLevel serverLevel) {
             DoorSounds sounds = this.doorSounds(serverLevel);
+            this.swingTicks = sounds.swingTicks();
             serverLevel.playSound(null, this.worldPosition, (opening ? sounds.open() : sounds.close()).get(), SoundSource.BLOCKS, 1.0F, 1.0F);
         }
         this.sync();
@@ -144,12 +147,17 @@ public abstract class PortalDoorBlockEntity extends BlockEntity implements Porta
 
     /** 0 = shut, 1 = fully open, for the {@code left} or right leaf. Interpolated with {@code partialTick} on the client. */
     public float getLeafOpenAmount(boolean left, float partialTick) {
-        return (left ? this.left : this.right).amount(partialTick);
+        return (left ? this.left : this.right).amount(partialTick, this.swingTicks);
     }
 
     private void snapAnimation() {
-        this.right.snap(this.doorState.rightOpen());
-        this.left.snap(this.doorState.leftOpen());
+        this.right.snap(this.doorState.rightOpen(), this.swingTicks);
+        this.left.snap(this.doorState.leftOpen(), this.swingTicks);
+    }
+
+    /** Ticks a leaf of this door takes to swing fully open or shut. */
+    public int swingTicks() {
+        return this.swingTicks;
     }
 
     private void sync() {
@@ -175,6 +183,7 @@ public abstract class PortalDoorBlockEntity extends BlockEntity implements Porta
                 this.doorState = DoorState.CLOSED;
             } else {
                 this.doorState = record.doorState();
+                this.swingTicks = this.doorSounds(serverLevel).swingTicks();
                 this.reconcile(serverLevel, TardisInteriorManager.get(serverLevel.getServer()), record);
             }
             this.snapAnimation();
@@ -222,6 +231,7 @@ public abstract class PortalDoorBlockEntity extends BlockEntity implements Porta
         // "open" is what older saves have; "door_state" replaces it.
         this.doorState = input.read("door_state", DoorState.CODEC)
                 .orElse(input.getBooleanOr("open", false) ? DoorState.BOTH_OPEN : DoorState.CLOSED);
+        this.swingTicks = Math.max(1, input.getIntOr("swing_ticks", DoorSounds.DEFAULT_SWING_TICKS));
         if (!this.animationPrimed) {
             // First load (world load or chunk arriving on the client): show the current state without animating.
             this.animationPrimed = true;
@@ -234,6 +244,7 @@ public abstract class PortalDoorBlockEntity extends BlockEntity implements Porta
         super.saveAdditional(output);
         output.storeNullable("tardis", UUIDUtil.CODEC, this.tardisId);
         output.store("door_state", DoorState.CODEC, this.doorState);
+        output.putInt("swing_ticks", this.swingTicks);
     }
 
     @Override
@@ -261,7 +272,7 @@ public abstract class PortalDoorBlockEntity extends BlockEntity implements Porta
 
     @Override
     public float getDoorOpenAmount(float partialTick) {
-        return this.right.amount(partialTick);
+        return this.right.amount(partialTick, this.swingTicks);
     }
 
     @Override

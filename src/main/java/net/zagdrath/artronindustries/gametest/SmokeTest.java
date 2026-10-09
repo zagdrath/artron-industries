@@ -44,6 +44,7 @@ import net.zagdrath.artronindustries.tardis.TardisRecord;
 import net.zagdrath.artronindustries.block.InteriorDoorwayBlock;
 import net.zagdrath.artronindustries.block.entity.InteriorDoorwayBlockEntity;
 import net.zagdrath.artronindustries.portal.PortalShape;
+import net.zagdrath.artronindustries.tardis.DoorSounds;
 import net.zagdrath.artronindustries.tardis.DoorState;
 import net.zagdrath.artronindustries.tardis.exterior.TardisExteriors;
 import net.zagdrath.artronindustries.tardis.interior.TardisInteriors;
@@ -135,7 +136,7 @@ public final class SmokeTest {
             }
             // Nothing holds the interior loaded on an empty server; keep the door chunk alive while the animation runs.
             interior.getChunkSource().addTicketWithRadius(TicketType.PORTAL, ChunkPos.containing(this.record.interiorDoorPos()), 1);
-            this.wait = PortalDoorBlockEntity.OPEN_TICKS + 2;
+            this.wait = DoorSounds.DEFAULT_SWING_TICKS + 2;
         });
         // BOTI streaming: capture the interior as seen from outside, change a block, expect a delta.
         this.steps.add(server -> {
@@ -218,7 +219,9 @@ public final class SmokeTest {
                     && !interior.getBlockState(leaf).getValue(InteriorDoorwayBlock.OPEN), "the wrong leaf opened first");
             manager.setDoorState(server, this.parlour, DoorState.BOTH_OPEN);
             check(interior.getBlockState(leaf).getCollisionShape(interior, leaf).isEmpty(), "open leaf still collides");
-            this.wait = PortalDoorBlockEntity.OPEN_TICKS + 2;
+            check(interior.getBlockEntity(this.parlour.interiorDoorPos()) instanceof InteriorDoorwayBlockEntity d
+                    && d.swingTicks() == this.parlour.interior().doorSounds().swingTicks(), "the parlour door does not swing with its sounds");
+            this.wait = this.parlour.interior().doorSounds().swingTicks() + 2;
         });
         // Thrown out near the edge of the 4-wide doorway, an item comes out in front of the police box's doors, not beside them.
         this.steps.add(server -> {
