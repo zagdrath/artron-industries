@@ -31,9 +31,12 @@ TARDIS interiors live in their own dimension and are visible through the doors (
 an open door is seamless. Architecture, configuration, testing and how the real exterior plugs in:
 [docs/BOTI.md](docs/BOTI.md).
 
-Test blocks (placeholders until the real exterior exists): `artronindustries:test_exterior_door` (placing one creates a
-TARDIS) and `artronindustries:interior_door`. Commands (`/artron` or `/artronindustries`, operators):
-`tardis create | list | info [id] | enter <id> | exit [id] | door <id> open|close | delete <id>`.
+Blocks: `artronindustries:tardis` (placing one creates a TARDIS) and `artronindustries:interior_door` (placeholder;
+placing one inside a TARDIS moves its interior door there). A TARDIS's exterior and interior are attributes of its block
+entity, `exterior` and `interior` (ids; defaults `artronindustries:hudolin` and `artronindustries:starter`), which an item
+can set: `/give @s artronindustries:tardis[block_entity_data={id:"artronindustries:tardis",exterior:"artronindustries:hudolin"}]`.
+Commands (`/artron` or `/artronindustries`, operators):
+`tardis create [exterior] [interior] | list | info [id] | enter <id> | exit [id] | door <id> open|close | delete <id>`.
 
 | Task | Description |
 | --- | --- |

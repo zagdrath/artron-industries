@@ -36,7 +36,7 @@ import net.minecraft.world.phys.Vec3;
  * @param planeOffset  distance of the doorway plane from the block centre along {@code facing} (0.5 = front face)
  */
 public record PortalShape(float width, float height, float bottomOffset, float planeOffset) {
-    /** Default for the placeholder doors: 1 wide, 2 tall, plane on the block's front face. */
+    /** Default for the interior door: 1 wide, 2 tall, plane on the block's front face. */
     public static final PortalShape DEFAULT_DOOR = new PortalShape(1.0F, 2.0F, 0.0F, 0.5F);
 
     public static final Codec<PortalShape> CODEC = RecordCodecBuilder.create(i -> i.group(

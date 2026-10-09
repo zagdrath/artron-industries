@@ -15,7 +15,7 @@ import net.minecraft.world.level.Level;
 
 /**
  * A block entity that acts as one end of a TARDIS doorway. BOTI rendering, crossing detection and teleporting are driven
- * entirely through this interface, so any block entity (the placeholder doors today, the real exterior later) gets them
+ * entirely through this interface, so any block entity (such as the TARDIS and its interior door) gets them
  * by implementing it and registering itself with {@link PortalEndpoints} while loaded.
  */
 public interface PortalEndpoint {

@@ -13,6 +13,7 @@ import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
+import net.neoforged.neoforge.client.event.RegisterSpecialModelRendererEvent;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.common.NeoForge;
 import net.zagdrath.artronindustries.client.ArtronClientCommands;
@@ -23,6 +24,7 @@ import net.zagdrath.artronindustries.client.boti.BotiDebugEntry;
 import net.zagdrath.artronindustries.client.boti.BotiPipelines;
 import net.zagdrath.artronindustries.client.boti.BotiRenderer;
 import net.zagdrath.artronindustries.client.boti.SeamlessTransition;
+import net.zagdrath.artronindustries.client.exterior.HudolinExteriorItemRenderer;
 import net.zagdrath.artronindustries.client.exterior.HudolinExteriorModel;
 import net.zagdrath.artronindustries.client.exterior.HudolinExteriorRenderer;
 import net.zagdrath.artronindustries.registry.ArtronBlockEntities;
@@ -40,7 +42,9 @@ public class ArtronIndustriesClient {
         modEventBus.addListener(EntityRenderersEvent.RegisterLayerDefinitions.class,
                 e -> e.registerLayerDefinition(HudolinExteriorRenderer.LAYER, HudolinExteriorModel::createBodyLayer));
         modEventBus.addListener(EntityRenderersEvent.RegisterRenderers.class,
-                e -> e.registerBlockEntityRenderer(ArtronBlockEntities.TEST_EXTERIOR_DOOR.get(), HudolinExteriorRenderer::new));
+                e -> e.registerBlockEntityRenderer(ArtronBlockEntities.TARDIS.get(), HudolinExteriorRenderer::new));
+        modEventBus.addListener(RegisterSpecialModelRendererEvent.class,
+                e -> e.register(HudolinExteriorItemRenderer.ID, HudolinExteriorItemRenderer.Unbaked.MAP_CODEC));
         NeoForge.EVENT_BUS.addListener(RegisterClientCommandsEvent.class, e -> ArtronClientCommands.register(e.getDispatcher()));
         ClientSmokeTest.registerIfEnabled();
     }

@@ -52,7 +52,7 @@ public final class ArtronGameTests {
         level.setBlockAndUpdate(pos, Blocks.AIR.defaultBlockState());
         level.setBlockAndUpdate(pos.above(), Blocks.AIR.defaultBlockState());
 
-        TardisRecord record = ArtronBlocks.TEST_EXTERIOR_DOOR.get().placeNewTardis(level, pos, Direction.EAST);
+        TardisRecord record = ArtronBlocks.TARDIS.get().placeNewTardis(level, pos, Direction.EAST);
         check(helper, record != null, "door could not be placed");
         check(helper, manager.get(record.uuid()) == record, "record not registered");
         check(helper, !record.interiorGenerated(), "interior generated eagerly");

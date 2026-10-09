@@ -27,13 +27,13 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import net.zagdrath.artronindustries.registry.ArtronBlocks;
 
 /**
- * The third block of the TARDIS exterior, above its upper half. It draws nothing; it only carries the top of the box's
+ * The third block of the TARDIS, above its upper half. It draws nothing; it only carries the top of the box's
  * outline and collision (sign plates, roof), which entities would otherwise never test: collision is only checked for
  * blocks next to an entity, and the roof is more than a block above the upper half. It goes when the box goes, and
  * breaking it breaks the box.
  */
-public class ExteriorTopBlock extends Block {
-    public ExteriorTopBlock(Properties properties) {
+public class TardisTopBlock extends Block {
+    public TardisTopBlock(Properties properties) {
         super(properties);
         this.registerDefaultState(this.stateDefinition.any().setValue(PortalDoorBlock.FACING, Direction.NORTH));
     }
@@ -44,7 +44,7 @@ public class ExteriorTopBlock extends Block {
     }
 
     private static boolean isExteriorUpper(BlockState state) {
-        return state.is(ArtronBlocks.TEST_EXTERIOR_DOOR.get()) && state.getValue(PortalDoorBlock.HALF) == DoubleBlockHalf.UPPER;
+        return state.is(ArtronBlocks.TARDIS.get()) && state.getValue(PortalDoorBlock.HALF) == DoubleBlockHalf.UPPER;
     }
 
     @Override
@@ -60,7 +60,7 @@ public class ExteriorTopBlock extends Block {
     public BlockState playerWillDestroy(Level level, BlockPos pos, BlockState state, Player player) {
         // The top has no drops of its own: breaking it breaks the box from its lower half, which drops the item.
         BlockPos lower = pos.below(2);
-        if (!level.isClientSide() && level.getBlockState(lower).is(ArtronBlocks.TEST_EXTERIOR_DOOR.get())) {
+        if (!level.isClientSide() && level.getBlockState(lower).is(ArtronBlocks.TARDIS.get())) {
             level.destroyBlock(lower, !player.isCreative(), player);
         }
         return super.playerWillDestroy(level, pos, state, player);
@@ -68,7 +68,7 @@ public class ExteriorTopBlock extends Block {
 
     @Override
     protected ItemStack getCloneItemStack(LevelReader level, BlockPos pos, BlockState state, boolean includeData) {
-        return new ItemStack(ArtronBlocks.TEST_EXTERIOR_DOOR_ITEM.get());
+        return new ItemStack(ArtronBlocks.TARDIS_ITEM.get());
     }
 
     @Override
@@ -78,12 +78,12 @@ public class ExteriorTopBlock extends Block {
 
     @Override
     protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
-        return TestExteriorDoorBlock.shape(false, 2, state.getValue(PortalDoorBlock.FACING), level, pos.below(2));
+        return TardisBlock.shape(false, 2, state.getValue(PortalDoorBlock.FACING), level, pos.below(2));
     }
 
     @Override
     protected VoxelShape getCollisionShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
-        return TestExteriorDoorBlock.shape(true, 2, state.getValue(PortalDoorBlock.FACING), level, pos.below(2));
+        return TardisBlock.shape(true, 2, state.getValue(PortalDoorBlock.FACING), level, pos.below(2));
     }
 
     @Override

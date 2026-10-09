@@ -43,9 +43,9 @@ public class ArtronIndustries {
         ArtronBlocks.init();
         CREATIVE_MODE_TABS.register("main", () -> CreativeModeTab.builder()
                 .title(Component.translatable("itemGroup.artronindustries"))
-                .icon(() -> ArtronBlocks.TEST_EXTERIOR_DOOR_ITEM.get().getDefaultInstance())
+                .icon(() -> ArtronBlocks.TARDIS_ITEM.get().getDefaultInstance())
                 .displayItems((params, output) -> {
-                    output.accept(ArtronBlocks.TEST_EXTERIOR_DOOR_ITEM.get());
+                    output.accept(ArtronBlocks.TARDIS_ITEM.get());
                     output.accept(ArtronBlocks.INTERIOR_DOOR_ITEM.get());
                 })
                 .build());

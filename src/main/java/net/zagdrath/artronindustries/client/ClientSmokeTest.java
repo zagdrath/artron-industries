@@ -121,11 +121,14 @@ public final class ClientSmokeTest {
             for (int dx = -1; dx <= 1; dx++) {
                 for (int dy = 0; dy <= 2; dy++) {
                     level.setBlockAndUpdate(door.offset(dx, dy, -1), Blocks.LAPIS_BLOCK.defaultBlockState());
-                    boolean opening = dx == 0 && dy < 2;
+                    // The whole column is left clear: the TARDIS takes three blocks.
+                    boolean opening = dx == 0;
                     level.setBlockAndUpdate(door.offset(dx, dy, 0), opening ? Blocks.AIR.defaultBlockState() : Blocks.LAPIS_BLOCK.defaultBlockState());
                 }
             }
-            this.record = ArtronBlocks.TEST_EXTERIOR_DOOR.get().placeNewTardis(level, door, Direction.SOUTH);
+            this.record = ArtronBlocks.TARDIS.get().placeNewTardis(level, door, Direction.SOUTH);
+            // In the last hotbar slot, so every screenshot also shows the TARDIS item model.
+            server.getPlayerList().getPlayers().getFirst().getInventory().setItem(8, ArtronBlocks.TARDIS_ITEM.get().getDefaultInstance());
             TardisInteriorManager.get(server).setDoorOpen(server, this.record, true);
             place(level, Vec3.atBottomCenterOf(door).add(0.0, 0.0, 5.0), this.doorCenter(PortalSide.EXTERIOR));
         }), null, 20);

@@ -10,16 +10,16 @@
           "type": "minecraft:item",
           "condition": {
             "type": "minecraft:match_block",
-            "blocks": "artronindustries:test_exterior_door",
+            "blocks": "artronindustries:tardis",
             "state": {
               "half": "lower"
             }
           },
-          "name": "artronindustries:test_exterior_door"
+          "name": "artronindustries:tardis"
         }
       ],
       "rolls": 1
     }
   ],
-  "random_sequence": "artronindustries:blocks/test_exterior_door"
+  "random_sequence": "artronindustries:blocks/tardis"
 }

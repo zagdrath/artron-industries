@@ -39,7 +39,7 @@ import net.zagdrath.artronindustries.tardis.TardisInteriorManager;
 import net.zagdrath.artronindustries.tardis.TardisRecord;
 
 /**
- * PLACEHOLDER door block entity shared by {@code test_exterior_door} and {@code interior_door}. Holds the TARDIS link and
+ * Door block entity shared by the TARDIS and {@code interior_door}. Holds the TARDIS link and
  * the {@link DoorState} mirroring the authoritative one in {@link TardisInteriorManager}, with each door leaf animated
  * locally. Single doors open with the right leaf.
  */

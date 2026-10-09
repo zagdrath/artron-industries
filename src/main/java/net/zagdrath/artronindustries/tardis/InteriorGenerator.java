@@ -21,7 +21,7 @@ import net.zagdrath.artronindustries.block.entity.PortalDoorBlockEntity;
 import net.zagdrath.artronindustries.registry.ArtronBlocks;
 
 /**
- * Builds the placeholder starter room. It deliberately contains blocks that exercise the BOTI mesher: biome tint (grass,
+ * Builds the starter room ({@link net.zagdrath.artronindustries.tardis.interior.TardisInteriors#STARTER}). It deliberately contains blocks that exercise the BOTI mesher: biome tint (grass,
  * leaves), translucency (water, stained glass), cutout (glass pane, flowers), emissive blocks and a block entity with a
  * renderer (chest).
  */
@@ -33,15 +33,6 @@ public final class InteriorGenerator {
     public static final int CLAIM_RADIUS = 128;
 
     private InteriorGenerator() {}
-
-    /** Lower half of the interior door: in the south wall, facing into the room. */
-    public static BlockPos doorPos(BlockPos origin) {
-        return origin.offset(0, 1, HALF + 1);
-    }
-
-    public static Direction doorFacing() {
-        return Direction.NORTH;
-    }
 
     public static void generate(ServerLevel level, TardisRecord record) {
         BlockPos o = record.interiorOrigin();

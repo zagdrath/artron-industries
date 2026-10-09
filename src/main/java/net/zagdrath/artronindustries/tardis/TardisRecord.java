@@ -21,6 +21,10 @@ import net.minecraft.world.level.Level;
 import net.zagdrath.artronindustries.portal.DoorPairTransform;
 import net.zagdrath.artronindustries.portal.PortalShape;
 import net.zagdrath.artronindustries.portal.PortalSide;
+import net.zagdrath.artronindustries.tardis.exterior.TardisExterior;
+import net.zagdrath.artronindustries.tardis.exterior.TardisExteriors;
+import net.zagdrath.artronindustries.tardis.interior.TardisInterior;
+import net.zagdrath.artronindustries.tardis.interior.TardisInteriors;
 
 /** Everything the server knows about one TARDIS. Mutated only through {@link TardisInteriorManager}. */
 public final class TardisRecord {
@@ -29,6 +33,7 @@ public final class TardisRecord {
             Codec.INT.fieldOf("id").forGetter(r -> r.id),
             Codec.INT.fieldOf("cell").forGetter(r -> r.cellIndex),
             BlockPos.CODEC.fieldOf("interior_origin").forGetter(r -> r.interiorOrigin),
+            TardisInteriors.CODEC.optionalFieldOf("interior", TardisInteriors.DEFAULT).forGetter(r -> r.interior),
             BlockPos.CODEC.fieldOf("interior_door").forGetter(r -> r.interiorDoorPos),
             Direction.CODEC.fieldOf("interior_facing").forGetter(r -> r.interiorDoorFacing),
             PortalShape.CODEC.optionalFieldOf("interior_shape", PortalShape.DEFAULT_DOOR).forGetter(r -> r.interiorShape),
@@ -36,6 +41,7 @@ public final class TardisRecord {
             Level.RESOURCE_KEY_CODEC.optionalFieldOf("exterior_level").forGetter(r -> Optional.ofNullable(r.exteriorLevel)),
             BlockPos.CODEC.optionalFieldOf("exterior_door").forGetter(r -> Optional.ofNullable(r.exteriorDoorPos)),
             Direction.CODEC.optionalFieldOf("exterior_facing", Direction.NORTH).forGetter(r -> r.exteriorFacing),
+            TardisExteriors.CODEC.optionalFieldOf("exterior", TardisExteriors.DEFAULT).forGetter(r -> r.exterior),
             PortalShape.CODEC.optionalFieldOf("exterior_shape", PortalShape.DEFAULT_DOOR).forGetter(r -> r.exteriorShape),
             // door_open is what older saves have; door_state replaces it.
             Codec.BOOL.optionalFieldOf("door_open", false).forGetter(r -> r.doorState.isOpen()),
@@ -46,6 +52,7 @@ public final class TardisRecord {
     final int id;
     final int cellIndex;
     final BlockPos interiorOrigin;
+    final TardisInterior interior;
     BlockPos interiorDoorPos;
     Direction interiorDoorFacing;
     PortalShape interiorShape;
@@ -53,17 +60,19 @@ public final class TardisRecord {
     @Nullable ResourceKey<Level> exteriorLevel;
     @Nullable BlockPos exteriorDoorPos;
     Direction exteriorFacing;
+    TardisExterior exterior;
     PortalShape exteriorShape;
     DoorState doorState;
 
-    private TardisRecord(UUID uuid, int id, int cellIndex, BlockPos interiorOrigin, BlockPos interiorDoorPos, Direction interiorDoorFacing,
-                         PortalShape interiorShape, boolean interiorGenerated, Optional<ResourceKey<Level>> exteriorLevel,
-                         Optional<BlockPos> exteriorDoorPos, Direction exteriorFacing, PortalShape exteriorShape, boolean doorOpen,
-                         Optional<DoorState> doorState) {
+    private TardisRecord(UUID uuid, int id, int cellIndex, BlockPos interiorOrigin, TardisInterior interior, BlockPos interiorDoorPos,
+                         Direction interiorDoorFacing, PortalShape interiorShape, boolean interiorGenerated,
+                         Optional<ResourceKey<Level>> exteriorLevel, Optional<BlockPos> exteriorDoorPos, Direction exteriorFacing,
+                         TardisExterior exterior, PortalShape exteriorShape, boolean doorOpen, Optional<DoorState> doorState) {
         this.uuid = uuid;
         this.id = id;
         this.cellIndex = cellIndex;
         this.interiorOrigin = interiorOrigin;
+        this.interior = interior;
         this.interiorDoorPos = interiorDoorPos;
         this.interiorDoorFacing = interiorDoorFacing;
         this.interiorShape = interiorShape;
@@ -71,13 +80,14 @@ public final class TardisRecord {
         this.exteriorLevel = exteriorLevel.orElse(null);
         this.exteriorDoorPos = exteriorDoorPos.orElse(null);
         this.exteriorFacing = exteriorFacing;
+        this.exterior = exterior;
         this.exteriorShape = exteriorShape;
         this.doorState = doorState.orElse(doorOpen ? DoorState.BOTH_OPEN : DoorState.CLOSED);
     }
 
-    TardisRecord(UUID uuid, int id, int cellIndex, BlockPos interiorOrigin, BlockPos interiorDoorPos, Direction interiorDoorFacing) {
-        this(uuid, id, cellIndex, interiorOrigin, interiorDoorPos, interiorDoorFacing, PortalShape.DEFAULT_DOOR, false,
-                Optional.empty(), Optional.empty(), Direction.NORTH, PortalShape.DEFAULT_DOOR, false, Optional.empty());
+    TardisRecord(UUID uuid, int id, int cellIndex, BlockPos interiorOrigin, TardisInterior interior, TardisExterior exterior) {
+        this(uuid, id, cellIndex, interiorOrigin, interior, interior.doorPos(interiorOrigin), interior.doorFacing(), PortalShape.DEFAULT_DOOR,
+                false, Optional.empty(), Optional.empty(), Direction.NORTH, exterior, exterior.doorway(), false, Optional.empty());
     }
 
     public UUID uuid() {
@@ -95,6 +105,11 @@ public final class TardisRecord {
 
     public BlockPos interiorOrigin() {
         return this.interiorOrigin;
+    }
+
+    /** The interior this TARDIS is (or will be) built with. */
+    public TardisInterior interior() {
+        return this.interior;
     }
 
     public BlockPos interiorDoorPos() {
@@ -123,6 +138,11 @@ public final class TardisRecord {
 
     public Direction exteriorFacing() {
         return this.exteriorFacing;
+    }
+
+    /** The exterior's look; kept while the TARDIS has no exterior placed. */
+    public TardisExterior exterior() {
+        return this.exterior;
     }
 
     public PortalShape exteriorShape() {

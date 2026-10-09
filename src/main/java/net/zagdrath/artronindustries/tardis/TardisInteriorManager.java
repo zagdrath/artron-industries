@@ -32,6 +32,8 @@ import net.zagdrath.artronindustries.Config;
 import net.zagdrath.artronindustries.block.entity.PortalDoorBlockEntity;
 import net.zagdrath.artronindustries.portal.PortalShape;
 import net.zagdrath.artronindustries.portal.PortalSide;
+import net.zagdrath.artronindustries.tardis.exterior.TardisExterior;
+import net.zagdrath.artronindustries.tardis.interior.TardisInterior;
 
 /**
  * Server-wide registry of TARDISes: allocates interior cells, remembers both door endpoints and owns the door-open state.
@@ -112,7 +114,7 @@ public final class TardisInteriorManager extends SavedData {
     }
 
     /** Allocates a new TARDIS with its exterior door at {@code doorPos}. The interior is generated lazily. */
-    public TardisRecord create(ServerLevel exteriorLevel, BlockPos doorPos, Direction facing, PortalShape shape) {
+    public TardisRecord create(ServerLevel exteriorLevel, BlockPos doorPos, Direction facing, TardisExterior exterior, TardisInterior interior) {
         int cell;
         if (Config.REUSE_DELETED_CELLS.getAsBoolean() && !this.freeCells.isEmpty()) {
             cell = this.freeCells.removeFirst();
@@ -122,15 +124,14 @@ public final class TardisInteriorManager extends SavedData {
         CellLayout.Cell c = CellLayout.cell(cell);
         int spacing = Config.CELL_SPACING.getAsInt();
         BlockPos origin = new BlockPos(c.x() * spacing, Config.INTERIOR_Y.getAsInt(), c.z() * spacing);
-        TardisRecord record = new TardisRecord(UUID.randomUUID(), this.nextId++, cell, origin,
-                InteriorGenerator.doorPos(origin), InteriorGenerator.doorFacing());
+        TardisRecord record = new TardisRecord(UUID.randomUUID(), this.nextId++, cell, origin, interior, exterior);
         record.exteriorLevel = exteriorLevel.dimension();
         record.exteriorDoorPos = doorPos.immutable();
         record.exteriorFacing = facing;
-        record.exteriorShape = shape;
         this.byUuid.put(record.uuid, record);
         this.setDirty();
-        ArtronIndustries.LOGGER.info("Created TARDIS #{} ({}) in cell {} at {}", record.id, record.uuid, cell, origin);
+        ArtronIndustries.LOGGER.info("Created TARDIS #{} ({}) in cell {} at {}: exterior {}, interior {}", record.id, record.uuid, cell, origin,
+                exterior, interior);
         return record;
     }
 
@@ -148,7 +149,7 @@ public final class TardisInteriorManager extends SavedData {
         notifyChanged(server, record, true);
     }
 
-    /** Generates the starter interior if it has not been generated yet. Returns false if the interior level is missing. */
+    /** Generates the TARDIS's interior if it has not been generated yet. Returns false if the interior level is missing. */
     public boolean ensureInterior(MinecraftServer server, TardisRecord record) {
         if (record.interiorGenerated) {
             return true;
@@ -160,7 +161,7 @@ public final class TardisInteriorManager extends SavedData {
         }
         record.interiorGenerated = true;
         this.setDirty();
-        InteriorGenerator.generate(level, record);
+        record.interior.generate(level, record);
         notifyChanged(server, record, false);
         return true;
     }
@@ -188,11 +189,12 @@ public final class TardisInteriorManager extends SavedData {
         notifyChanged(server, record, false);
     }
 
-    public void linkExterior(MinecraftServer server, TardisRecord record, ServerLevel level, BlockPos pos, Direction facing, PortalShape shape) {
+    public void linkExterior(MinecraftServer server, TardisRecord record, ServerLevel level, BlockPos pos, Direction facing, TardisExterior exterior) {
         record.exteriorLevel = level.dimension();
         record.exteriorDoorPos = pos.immutable();
         record.exteriorFacing = facing;
-        record.exteriorShape = shape;
+        record.exterior = exterior;
+        record.exteriorShape = exterior.doorway();
         this.setDirty();
         notifyChanged(server, record, false);
     }

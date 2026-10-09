@@ -18,9 +18,11 @@ import com.mojang.brigadier.suggestion.SuggestionProvider;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.commands.arguments.IdentifierArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -31,6 +33,10 @@ import net.zagdrath.artronindustries.portal.PortalSide;
 import net.zagdrath.artronindustries.registry.ArtronBlocks;
 import net.zagdrath.artronindustries.tardis.TardisInteriorManager;
 import net.zagdrath.artronindustries.tardis.TardisRecord;
+import net.zagdrath.artronindustries.tardis.exterior.TardisExterior;
+import net.zagdrath.artronindustries.tardis.exterior.TardisExteriors;
+import net.zagdrath.artronindustries.tardis.interior.TardisInterior;
+import net.zagdrath.artronindustries.tardis.interior.TardisInteriors;
 
 /** {@code /artron tardis ...} test and admin commands. */
 public final class ArtronCommands {
@@ -42,11 +48,19 @@ public final class ArtronCommands {
             Component.translatable("commands.artronindustries.tardis.no_exterior"));
     private static final SimpleCommandExceptionType NO_INTERIOR = new SimpleCommandExceptionType(
             Component.translatable("commands.artronindustries.tardis.no_interior"));
+    private static final DynamicCommandExceptionType UNKNOWN_EXTERIOR = new DynamicCommandExceptionType(
+            id -> Component.translatable("commands.artronindustries.tardis.unknown_exterior", id));
+    private static final DynamicCommandExceptionType UNKNOWN_INTERIOR = new DynamicCommandExceptionType(
+            id -> Component.translatable("commands.artronindustries.tardis.unknown_interior", id));
     private static final SimpleCommandExceptionType NOT_IN_TARDIS = new SimpleCommandExceptionType(
             Component.translatable("commands.artronindustries.tardis.not_inside"));
 
     private static final SuggestionProvider<CommandSourceStack> TARDIS_IDS = (ctx, builder) -> SharedSuggestionProvider.suggest(
             TardisInteriorManager.get(ctx.getSource().getServer()).all().stream().map(r -> Integer.toString(r.id())), builder);
+    private static final SuggestionProvider<CommandSourceStack> EXTERIORS = (ctx, builder) -> SharedSuggestionProvider.suggestResource(
+            TardisExteriors.all().stream().map(TardisExterior::id), builder);
+    private static final SuggestionProvider<CommandSourceStack> INTERIORS = (ctx, builder) -> SharedSuggestionProvider.suggestResource(
+            TardisInteriors.all().stream().map(TardisInterior::id), builder);
 
     private ArtronCommands() {}
 
@@ -61,7 +75,12 @@ public final class ArtronCommands {
         return Commands.literal(root)
                 .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                 .then(Commands.literal("tardis")
-                        .then(Commands.literal("create").executes(ctx -> create(ctx.getSource())))
+                        .then(Commands.literal("create")
+                                .executes(ctx -> create(ctx.getSource(), TardisExteriors.DEFAULT, TardisInteriors.DEFAULT))
+                                .then(Commands.argument("exterior", IdentifierArgument.id()).suggests(EXTERIORS)
+                                        .executes(ctx -> create(ctx.getSource(), exterior(ctx), TardisInteriors.DEFAULT))
+                                        .then(Commands.argument("interior", IdentifierArgument.id()).suggests(INTERIORS)
+                                                .executes(ctx -> create(ctx.getSource(), exterior(ctx), interior(ctx))))))
                         .then(Commands.literal("list").executes(ctx -> list(ctx.getSource())))
                         .then(Commands.literal("info")
                                 .executes(ctx -> info(ctx.getSource(), current(ctx.getSource())))
@@ -89,6 +108,24 @@ public final class ArtronCommands {
         return record;
     }
 
+    private static TardisExterior exterior(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        Identifier id = IdentifierArgument.getId(ctx, "exterior");
+        TardisExterior exterior = TardisExteriors.get(id);
+        if (exterior == null) {
+            throw UNKNOWN_EXTERIOR.create(id);
+        }
+        return exterior;
+    }
+
+    private static TardisInterior interior(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        Identifier id = IdentifierArgument.getId(ctx, "interior");
+        TardisInterior interior = TardisInteriors.get(id);
+        if (interior == null) {
+            throw UNKNOWN_INTERIOR.create(id);
+        }
+        return interior;
+    }
+
     /** The TARDIS whose interior the source is standing in. */
     private static TardisRecord current(CommandSourceStack source) throws CommandSyntaxException {
         TardisRecord record = TardisInteriorManager.isInterior(source.getLevel())
@@ -100,12 +137,12 @@ public final class ArtronCommands {
         return record;
     }
 
-    /** Places a test exterior door two blocks in front of the player, facing them, which allocates a new TARDIS. */
-    private static int create(CommandSourceStack source) throws CommandSyntaxException {
+    /** Places a TARDIS two blocks in front of the player, facing them, which allocates a new TARDIS. */
+    private static int create(CommandSourceStack source, TardisExterior exterior, TardisInterior interior) throws CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
         Direction look = player.getDirection();
         BlockPos pos = player.blockPosition().relative(look, 2);
-        TardisRecord record = ArtronBlocks.TEST_EXTERIOR_DOOR.get().placeNewTardis(source.getLevel(), pos, look.getOpposite());
+        TardisRecord record = ArtronBlocks.TARDIS.get().placeNewTardis(source.getLevel(), pos, look.getOpposite(), exterior, interior);
         if (record == null) {
             throw NO_SPACE.create();
         }
@@ -126,6 +163,7 @@ public final class ArtronCommands {
 
     private static int info(CommandSourceStack source, TardisRecord r) {
         source.sendSuccess(() -> Component.literal("TARDIS #" + r.id() + " (" + r.uuid() + ")"), false);
+        source.sendSuccess(() -> Component.literal(" exterior " + r.exterior() + ", interior " + r.interior()), false);
         source.sendSuccess(() -> Component.literal(" cell " + r.cellIndex() + ", origin " + r.interiorOrigin().toShortString()
                 + (r.interiorGenerated() ? "" : " (not generated yet)")), false);
         source.sendSuccess(() -> Component.literal(" interior door " + r.interiorDoorPos().toShortString() + " facing " + r.interiorDoorFacing()), false);

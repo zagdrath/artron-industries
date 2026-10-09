@@ -109,7 +109,7 @@ public final class SmokeTest {
             BlockPos ground = overworld.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, new BlockPos(8, 0, 8));
             overworld.setBlockAndUpdate(ground, Blocks.AIR.defaultBlockState());
             overworld.setBlockAndUpdate(ground.above(), Blocks.AIR.defaultBlockState());
-            this.record = ArtronBlocks.TEST_EXTERIOR_DOOR.get().placeNewTardis(overworld, ground, Direction.SOUTH);
+            this.record = ArtronBlocks.TARDIS.get().placeNewTardis(overworld, ground, Direction.SOUTH);
             check(this.record != null, "could not place the exterior door at " + ground);
             overworld.getChunkSource().addTicketWithRadius(TicketType.PORTAL, ChunkPos.containing(ground), 1);
         });

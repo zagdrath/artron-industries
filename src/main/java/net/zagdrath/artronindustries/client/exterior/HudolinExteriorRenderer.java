@@ -24,14 +24,17 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.zagdrath.artronindustries.ArtronIndustries;
-import net.zagdrath.artronindustries.block.entity.TestExteriorDoorBlockEntity;
+import net.zagdrath.artronindustries.block.entity.TardisBlockEntity;
 import net.zagdrath.artronindustries.client.boti.BotiDoorOverlay;
 
 /**
- * Draws the TARDIS exterior as the Hudolin police box, centred on the lower block and turned to face {@code FACING}. The
- * doors swing in behind the doorway plane, so they are also drawn again inside the doorway ({@link BotiDoorOverlay}).
+ * Draws the TARDIS as the Hudolin police box, centred on the lower block and turned to face {@code FACING}. The doors
+ * swing in behind the doorway plane, so they are also drawn again inside the doorway ({@link BotiDoorOverlay}).
+ * <p>
+ * The Hudolin is the only exterior so far, so this is the TARDIS block entity's renderer whatever its
+ * {@link TardisBlockEntity#exterior()}; with a second exterior it becomes one of several picked by that id.
  */
-public class HudolinExteriorRenderer implements BlockEntityRenderer<TestExteriorDoorBlockEntity, HudolinExteriorRenderer.RenderState>,
+public class HudolinExteriorRenderer implements BlockEntityRenderer<TardisBlockEntity, HudolinExteriorRenderer.RenderState>,
         BotiDoorOverlay<HudolinExteriorRenderer.RenderState> {
     public static final ModelLayerLocation LAYER = new ModelLayerLocation(Identifier.fromNamespaceAndPath(ArtronIndustries.MODID, "hudolin_exterior"), "main");
     public static final Identifier TEXTURE = Identifier.fromNamespaceAndPath(ArtronIndustries.MODID, "textures/block/exterior/hudolin.png");
@@ -54,7 +57,7 @@ public class HudolinExteriorRenderer implements BlockEntityRenderer<TestExterior
     }
 
     @Override
-    public void extractRenderState(TestExteriorDoorBlockEntity door, RenderState state, float partialTicks, Vec3 cameraPosition,
+    public void extractRenderState(TardisBlockEntity door, RenderState state, float partialTicks, Vec3 cameraPosition,
                                    ModelFeatureRenderer.@Nullable CrumblingOverlay breakProgress) {
         BlockEntityRenderer.super.extractRenderState(door, state, partialTicks, cameraPosition, breakProgress);
         state.facing = door.getFacing();
@@ -91,7 +94,7 @@ public class HudolinExteriorRenderer implements BlockEntityRenderer<TestExterior
      * From the block's corner to model space: model y points down from 24 px above the ground, and model x is mirrored,
      * as for entity models. The model faces north as built.
      */
-    private static void orient(PoseStack poseStack, Direction facing) {
+    static void orient(PoseStack poseStack, Direction facing) {
         poseStack.translate(0.5F, 0.0F, 0.5F);
         poseStack.rotateDegrees(Axis.YP, 180.0F - facing.toYRot());
         poseStack.scale(-1.0F, -1.0F, 1.0F);
@@ -105,7 +108,7 @@ public class HudolinExteriorRenderer implements BlockEntityRenderer<TestExterior
 
     /** The box overhangs the block by 6 px on every side and is 52 px tall. */
     @Override
-    public AABB getRenderBoundingBox(TestExteriorDoorBlockEntity door) {
+    public AABB getRenderBoundingBox(TardisBlockEntity door) {
         BlockPos pos = door.getBlockPos();
         return new AABB(pos.getX() - 0.5, pos.getY(), pos.getZ() - 0.5, pos.getX() + 1.5, pos.getY() + 3.5, pos.getZ() + 1.5);
     }

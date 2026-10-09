@@ -46,10 +46,11 @@ import net.zagdrath.artronindustries.block.entity.PortalDoorBlockEntity;
 import net.zagdrath.artronindustries.portal.PortalShape;
 
 /**
- * PLACEHOLDER base for the two test doors. A two-block-tall doorway whose only solid part is a thin panel at the back,
- * so entities can walk up to (and through) the doorway plane on the front face. The block entity lives in the lower half.
+ * Base for the two ends of a TARDIS doorway: the {@link TardisBlock} outside and the {@link InteriorDoorBlock} inside. A
+ * two-block-tall door whose block entity lives in the lower half. By default its only solid part is a thin panel at the
+ * back, so entities can walk up to (and through) the doorway plane on the front face.
  * <p>
- * The real TARDIS exterior replaces {@link TestExteriorDoorBlock}; BOTI does not depend on anything in this class.
+ * BOTI does not depend on anything in this class, only on {@link net.zagdrath.artronindustries.portal.PortalEndpoint}.
  */
 public abstract class PortalDoorBlock extends BaseEntityBlock {
     public static final EnumProperty<Direction> FACING = BlockStateProperties.HORIZONTAL_FACING;
@@ -147,7 +148,7 @@ public abstract class PortalDoorBlock extends BaseEntityBlock {
         return state.rotate(mirror.getRotation(state.getValue(FACING)));
     }
 
-    /** Placeholder doors always use the default 1x2 shape; the real exterior supplies its own. */
+    /** The doorway of a door of this block; the TARDIS's comes from its exterior instead (see TardisBlockEntity). */
     public PortalShape portalShape(BlockState state) {
         return PortalShape.DEFAULT_DOOR;
     }

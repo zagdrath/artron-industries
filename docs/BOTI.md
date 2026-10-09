@@ -190,11 +190,26 @@ by the server):
 | `boti.interiorBackdropColor` | 0x05060a | Colour behind interior geometry. |
 | `boti.debugTimings` | false | Log rebuild timings at INFO. |
 
-## How the real TARDIS exterior plugs in
+## Exteriors and interiors
 
-The placeholder `test_exterior_door` exists only until the real exterior is ready. To replace it:
+The TARDIS block (`artronindustries:tardis`, `TardisBlock` / `TardisBlockEntity`) carries two attributes, saved on its
+block entity and in its `TardisRecord`:
 
-1. Make the exterior's block entity implement `PortalEndpoint`:
+* `exterior` — a `TardisExterior` from `TardisExteriors` (default `artronindustries:hudolin`). It supplies the doorway
+  (`PortalShape`) and the outline and collision of the three blocks the box stands on; its model is drawn by the TARDIS
+  block entity renderer (`HudolinExteriorRenderer`, the only one so far). The block entity's exterior wins: on load the
+  record is brought in line with it.
+* `interior` — a `TardisInterior` from `TardisInteriors` (default `artronindustries:starter`, built by
+  `InteriorGenerator`). It gives the interior door's offset from the cell origin and facing, and generates the interior
+  the first time it is needed. The record's interior wins, since it may already be built.
+
+Both are set from the item's `block_entity_data` when placed (or by `/artron tardis create [exterior] [interior]`).
+Unknown ids in saves load as the defaults. To add an exterior, subclass `TardisExterior` and register it in
+`TardisExteriors`; to add an interior, register a `TardisInterior` in `TardisInteriors`.
+
+Anything else that should act as a doorway end works the same way as `TardisBlockEntity`:
+
+1. Make its block entity implement `PortalEndpoint`:
    * `getPortalShape()` — the exterior's doorway (`new PortalShape(width, height, bottomOffset, planeOffset)`; the plane
      should be where the door leaves are, the opening the clear area inside the frame);
    * `getFacing()` — the direction the doors face;
@@ -204,11 +219,11 @@ The placeholder `test_exterior_door` exists only until the real exterior is read
 2. Register while loaded: `PortalEndpoints.add(level, this)` in `onLoad()`, `PortalEndpoints.remove(level, this)` in
    `onChunkUnloaded()` and `setRemoved()`.
 3. Link and keep the server in charge of the door: on placement call
-   `TardisInteriorManager.get(server).create(level, pos, facing, shape)` (or `linkExterior(...)` for an existing TARDIS);
+   `TardisInteriorManager.get(server).create(level, pos, facing, exterior, interior)` (or `linkExterior(...)` for an existing TARDIS);
    open/close through `TardisInteriorManager#setDoorOpen` and mirror the state it pushes (see `PortalDoorBlockEntity`
    for a complete example, including `onLoad` reconciliation and unlinking in `preRemoveSideEffects`).
-4. Keep the collision clear in front of the doorway plane so entities can reach it (the placeholder's only collision is a
-   thin back panel).
+4. Keep the collision clear in front of the doorway plane so entities can reach it (the interior door's only collision
+   is a thin back panel).
 
 Nothing in the renderer, the watcher, the crossing detector or the teleport needs to change; they all read `PortalShape`
 and `PortalEndpoint`. The exterior model/renderer is drawn normally — BOTI draws on top of the doorway after opaque

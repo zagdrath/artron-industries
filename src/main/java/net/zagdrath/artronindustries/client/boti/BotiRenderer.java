@@ -76,7 +76,7 @@ import net.zagdrath.artronindustries.portal.PortalSide;
 
 /**
  * Draws the view through every open, visible {@link PortalEndpoint}. Driven only by the endpoint tracker, so any block
- * entity implementing {@link PortalEndpoint} (the placeholder doors now, the real exterior later) gets BOTI for free.
+ * entity implementing {@link PortalEndpoint} (such as the TARDIS and its interior door) gets BOTI for free.
  * <p>
  * Per frame: doors are culled and their draw data computed during level extraction; meshes are uploaded, translucent
  * quads re-sorted, doorway quads uploaded and block entities submitted in {@link PrepareRenderBuffersEvent} (no render pass
