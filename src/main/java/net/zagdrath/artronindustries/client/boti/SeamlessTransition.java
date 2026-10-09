@@ -66,6 +66,11 @@ public final class SeamlessTransition {
 
     private static @Nullable BotiCrossingPayload crossing;
     private static @Nullable Departure departure;
+    /**
+     * The doorway's turn, already given to the new player when it was placed at the arrival point. The server's teleport
+     * turns it again (its rotation is relative), so this much is taken back off once that has arrived.
+     */
+    private static float preTurn;
 
     private SeamlessTransition() {}
 
@@ -112,6 +117,13 @@ public final class SeamlessTransition {
         crossing = null;
         departure = null;
         LocalPlayer player = Minecraft.getInstance().player;
+        float turned = preTurn;
+        preTurn = 0.0F;
+        if (player != null && turned != 0.0F) {
+            player.setYRot(player.getYRot() - turned);
+            player.setYHeadRot(player.getYHeadRot() - turned);
+            player.yRotO -= turned;
+        }
         if (c == null || d == null || player == null || !payload.key().equals(c.key()) || player.level().dimension() != c.destination()) {
             return;
         }
@@ -150,6 +162,7 @@ public final class SeamlessTransition {
         DoorPairTransform transform = view.snapshot().geometry().nearToFar();
         Vec3 pos = transform.apply(oldPlayer.position());
         float yaw = transform.applyYaw(oldPlayer.getYRot());
+        preTurn = yaw - oldPlayer.getYRot();
         newPlayer.snapTo(pos.x, pos.y, pos.z, yaw, oldPlayer.getXRot());
         newPlayer.setOldPosAndRot(pos, yaw, oldPlayer.getXRot());
     }

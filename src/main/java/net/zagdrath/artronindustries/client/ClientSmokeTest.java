@@ -91,6 +91,17 @@ public final class ClientSmokeTest {
         }
     }
 
+    /** After walking straight through a doorway the player must face straight out of the far door, not turned. */
+    private static void checkFacing(String what, Direction expected) {
+        float yaw = Minecraft.getInstance().player.getYRot();
+        float off = Math.abs(net.minecraft.util.Mth.wrapDegrees(yaw - expected.toYRot()));
+        if (off > 15.0F) {
+            ArtronIndustries.LOGGER.error("CLIENT SMOKE FAILED: after {} the player faces {} degrees, expected {} ({})", what, yaw, expected.toYRot(), expected);
+        } else {
+            ArtronIndustries.LOGGER.info("CLIENT SMOKE {} facing ok ({} degrees off)", what, off);
+        }
+    }
+
     /**
      * Moves the player {@code distance} blocks the way it faces. Held movement keys only move it while the window has
      * focus, which a scripted run cannot count on.
@@ -284,6 +295,7 @@ public final class ClientSmokeTest {
             mc.options.keyUp.setDown(false);
             mc.options.keySprint.setDown(false);
             ArtronIndustries.LOGGER.info("CLIENT SMOKE walked in: now in {} at {}", mc.level.dimension().identifier(), mc.player.position());
+            checkFacing("walk in", this.record.interiorDoorFacing());
         }, null, 10);
         this.step("walk_out_setup", () -> onServer(server -> {
             Vec3 anchor = this.record.interiorShape().anchor(this.record.interiorDoorPos(), this.record.interiorDoorFacing());
@@ -303,6 +315,7 @@ public final class ClientSmokeTest {
             Minecraft mc = Minecraft.getInstance();
             mc.options.keyUp.setDown(false);
             ArtronIndustries.LOGGER.info("CLIENT SMOKE walked out: now in {} at {}", mc.level.dimension().identifier(), mc.player.position());
+            checkFacing("walk out", this.record.exteriorFacing());
         }, null, 10);
         this.step("throw_item", () -> onServer(server -> {
             // Out of the way, so the (creative) player does not pick the item up.
@@ -404,8 +417,7 @@ public final class ClientSmokeTest {
             TardisInteriorManager.get(server).setDoorState(server, this.parlour, DoorState.BOTH_OPEN);
             Vec3 inDoor = this.parlourDoor();
             place(TardisInteriorManager.interiorLevel(server), inDoor.add(this.parlourFacing().scale(1.4)).subtract(0.0, 2.0, 0.0),
-                    inDoor.add(this.parlourFacing().scale(20.0)).add(Vec3.atLowerCornerOf(net.zagdrath.artronindustries.portal.PortalShape.right(
-                            this.parlour.interiorDoorFacing()).getUnitVec3i()).scale(6.0)));
+                    inDoor.add(this.parlourFacing().scale(20.0)));
         }), null, 0);
         this.step("parlour_back_ready", () -> {}, () -> TardisInteriorManager.isInterior(Minecraft.getInstance().level)
                 && Minecraft.getInstance().levelRenderer.hasRenderedAllSections(), 40);
@@ -416,6 +428,7 @@ public final class ClientSmokeTest {
                 shot(name);
             }, null, 1);
         }
+        this.step("parlour_back_check", () -> checkFacing("backwards walk out", this.parlour.exteriorFacing().getOpposite()), null, 0);
         this.step("quit", () -> {
             BotiRenderer.setDebugFloatingPos(null);
             ArtronIndustries.LOGGER.info("CLIENT SMOKE done: {}", String.format("rebuild %.2f ms, draw %.3f ms (%d doorways)",
