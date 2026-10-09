@@ -1,0 +1,42 @@
+{
+  "variants": {
+    "facing=north,offset=false": {
+      "model": "artronindustries:block/roundel",
+      "uvlock": true
+    },
+    "facing=east,offset=false": {
+      "model": "artronindustries:block/roundel",
+      "y": 90,
+      "uvlock": true
+    },
+    "facing=south,offset=false": {
+      "model": "artronindustries:block/roundel",
+      "y": 180,
+      "uvlock": true
+    },
+    "facing=west,offset=false": {
+      "model": "artronindustries:block/roundel",
+      "y": 270,
+      "uvlock": true
+    },
+    "facing=north,offset=true": {
+      "model": "artronindustries:block/roundel_offset",
+      "uvlock": true
+    },
+    "facing=east,offset=true": {
+      "model": "artronindustries:block/roundel_offset",
+      "y": 90,
+      "uvlock": true
+    },
+    "facing=south,offset=true": {
+      "model": "artronindustries:block/roundel_offset",
+      "y": 180,
+      "uvlock": true
+    },
+    "facing=west,offset=true": {
+      "model": "artronindustries:block/roundel_offset",
+      "y": 270,
+      "uvlock": true
+    }
+  }
+}

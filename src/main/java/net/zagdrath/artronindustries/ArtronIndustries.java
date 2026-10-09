@@ -49,6 +49,8 @@ public class ArtronIndustries {
                 .displayItems((params, output) -> {
                     output.accept(ArtronBlocks.TARDIS_ITEM.get());
                     output.accept(ArtronBlocks.INTERIOR_DOOR_ITEM.get());
+                    output.accept(ArtronBlocks.HELL_BENT_DOOR_ITEM.get());
+                    output.accept(ArtronBlocks.ROUNDEL_ITEM.get());
                 })
                 .build());
     }

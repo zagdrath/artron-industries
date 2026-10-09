@@ -22,6 +22,12 @@ public final class ArtronSounds {
     /** The Victorian Parlour's big interior doors. */
     public static final Supplier<SoundEvent> VICTORIAN_PARLOUR_DOOR_OPEN = register("door.victorian_parlour.open");
     public static final Supplier<SoundEvent> VICTORIAN_PARLOUR_DOOR_CLOSE = register("door.victorian_parlour.close");
+    /**
+     * The Hell Bent roundel door. For now sounds.json plays the parlour's door sounds for these; its own go there when
+     * they exist (and HellBentDoorBlock.SOUNDS's swing ticks change to their length).
+     */
+    public static final Supplier<SoundEvent> HELL_BENT_DOOR_OPEN = register("door.hell_bent.open");
+    public static final Supplier<SoundEvent> HELL_BENT_DOOR_CLOSE = register("door.hell_bent.close");
     /** The Hudolin police box's doors, heard from outside. */
     public static final Supplier<SoundEvent> HUDOLIN_DOOR_OPEN = register("door.hudolin.open");
     public static final Supplier<SoundEvent> HUDOLIN_DOOR_CLOSE = register("door.hudolin.close");

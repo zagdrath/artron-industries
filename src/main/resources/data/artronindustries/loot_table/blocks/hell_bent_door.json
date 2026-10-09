@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "condition": {
+        "type": "minecraft:survives_explosion"
+      },
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "condition": {
+            "type": "minecraft:match_block",
+            "blocks": "artronindustries:hell_bent_door",
+            "state": {
+              "column": "0",
+              "row": "0"
+            }
+          },
+          "name": "artronindustries:hell_bent_door"
+        }
+      ],
+      "rolls": 1
+    }
+  ],
+  "random_sequence": "artronindustries:blocks/hell_bent_door"
+}

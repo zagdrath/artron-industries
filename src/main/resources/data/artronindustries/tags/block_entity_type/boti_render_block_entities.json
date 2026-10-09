@@ -23,6 +23,7 @@
     "minecraft:vault",
     "minecraft:mob_spawner",
     "minecraft:trial_spawner",
-    "artronindustries:interior_doorway"
+    "artronindustries:interior_doorway",
+    "artronindustries:hell_bent_door"
   ]
 }

@@ -71,6 +71,30 @@ class InteriorDoorwayTest {
         assertTrue(anchor.distanceTo(new Vec3(front.x, a.getY(), front.z)) < EPS, () -> facing + ": anchor " + anchor + ", expected " + front);
     }
 
+    /**
+     * The Hell Bent door's layout: one layer of 2 x 3 cells, the clicked (master) cell bottom left as seen from the room,
+     * the opening across both columns with its plane just behind the 4 px leaves at the front.
+     */
+    @ParameterizedTest
+    @EnumSource(value = Direction.class, names = {"NORTH", "EAST", "SOUTH", "WEST"})
+    void hellBentDoorway(Direction facing) {
+        InteriorDoorway doorway = new InteriorDoorway(2, 3, 1, 0.25F);
+        BlockPos master = new BlockPos(5, 64, -2);
+        Direction right = PortalShape.right(facing);
+        assertEquals(master.relative(right).above(2), doorway.cell(master, facing, doorway.cellCount() - 1));
+        PortalShape shape = doorway.shape();
+        assertEquals(2.0F, shape.width());
+        assertEquals(3.0F, shape.height());
+        Vec3 frontLeft = Vec3.atBottomCenterOf(master).add(Vec3.atLowerCornerOf(facing.getUnitVec3i()).scale(0.5))
+                .subtract(Vec3.atLowerCornerOf(right.getUnitVec3i()).scale(0.5));
+        Vec3 expected = frontLeft.add(Vec3.atLowerCornerOf(right.getUnitVec3i()))
+                .subtract(Vec3.atLowerCornerOf(facing.getUnitVec3i()).scale(0.25 + InteriorDoorway.PLANE_GAP));
+        Vec3 anchor = shape.anchor(master, facing);
+        assertTrue(anchor.distanceTo(expected) < EPS, () -> facing + ": anchor " + anchor + ", expected " + expected);
+        assertTrue(doorway.inLeftLeaf(0));
+        assertFalse(doorway.inLeftLeaf(1));
+    }
+
     @Test
     void lateralOffsetMovesTheOpening() {
         PortalShape shape = new PortalShape(2.0F, 2.0F, 0.0F, 0.5F, 1.0F);

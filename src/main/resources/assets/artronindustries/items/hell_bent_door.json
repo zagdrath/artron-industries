@@ -1,0 +1,9 @@
+{
+  "model": {
+    "type": "minecraft:special",
+    "base": "artronindustries:item/hell_bent_door",
+    "model": {
+      "type": "artronindustries:hell_bent_door"
+    }
+  }
+}

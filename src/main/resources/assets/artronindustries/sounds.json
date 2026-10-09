@@ -19,6 +19,18 @@
     ],
     "subtitle": "subtitles.artronindustries.tardis_door.close"
   },
+  "door.hell_bent.open": {
+    "sounds": [
+      "artronindustries:door/victorian_parlour_open"
+    ],
+    "subtitle": "subtitles.artronindustries.tardis_door.open"
+  },
+  "door.hell_bent.close": {
+    "sounds": [
+      "artronindustries:door/victorian_parlour_close"
+    ],
+    "subtitle": "subtitles.artronindustries.tardis_door.close"
+  },
   "door.hudolin.open": {
     "sounds": [
       "artronindustries:door/hudolin_open"

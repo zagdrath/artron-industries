@@ -11,6 +11,7 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
+import net.neoforged.neoforge.client.event.AddClientReloadListenersEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
 import net.neoforged.neoforge.client.event.RegisterSpecialModelRendererEvent;
@@ -28,6 +29,9 @@ import net.zagdrath.artronindustries.client.boti.SeamlessTransition;
 import net.zagdrath.artronindustries.client.exterior.HudolinExteriorItemRenderer;
 import net.zagdrath.artronindustries.client.exterior.HudolinExteriorModel;
 import net.zagdrath.artronindustries.client.exterior.HudolinExteriorRenderer;
+import net.zagdrath.artronindustries.client.interior.HellBentDoorItemRenderer;
+import net.zagdrath.artronindustries.client.interior.HellBentDoorModel;
+import net.zagdrath.artronindustries.client.interior.HellBentDoorRenderer;
 import net.zagdrath.artronindustries.client.interior.InteriorDoorwayRenderer;
 import net.zagdrath.artronindustries.registry.ArtronBlockEntities;
 
@@ -49,9 +53,13 @@ public class ArtronIndustriesClient {
                 e -> {
                     e.registerBlockEntityRenderer(ArtronBlockEntities.TARDIS.get(), HudolinExteriorRenderer::new);
                     e.registerBlockEntityRenderer(ArtronBlockEntities.INTERIOR_DOORWAY.get(), InteriorDoorwayRenderer::new);
+                    e.registerBlockEntityRenderer(ArtronBlockEntities.HELL_BENT_DOOR.get(), HellBentDoorRenderer::new);
                 });
-        modEventBus.addListener(RegisterSpecialModelRendererEvent.class,
-                e -> e.register(HudolinExteriorItemRenderer.ID, HudolinExteriorItemRenderer.Unbaked.MAP_CODEC));
+        modEventBus.addListener(RegisterSpecialModelRendererEvent.class, e -> {
+            e.register(HudolinExteriorItemRenderer.ID, HudolinExteriorItemRenderer.Unbaked.MAP_CODEC);
+            e.register(HellBentDoorModel.ID, HellBentDoorItemRenderer.Unbaked.MAP_CODEC);
+        });
+        modEventBus.addListener(AddClientReloadListenersEvent.class, e -> e.addListener(HellBentDoorModel.ID, HellBentDoorModel.INSTANCE));
         NeoForge.EVENT_BUS.addListener(RegisterClientCommandsEvent.class, e -> ArtronClientCommands.register(e.getDispatcher()));
         ClientSmokeTest.registerIfEnabled();
     }

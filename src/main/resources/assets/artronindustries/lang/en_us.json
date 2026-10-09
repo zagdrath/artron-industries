@@ -43,6 +43,8 @@
   "block.artronindustries.tardis_top": "TARDIS",
   "block.artronindustries.interior_door": "TARDIS Interior Door (Placeholder)",
   "block.artronindustries.interior_doorway": "TARDIS Doorway",
+  "block.artronindustries.hell_bent_door": "Hell Bent Door",
+  "block.artronindustries.roundel": "Roundel",
   "message.artronindustries.tardis.created": "TARDIS #%s materialised",
   "message.artronindustries.tardis.not_inside": "A TARDIS cannot materialise inside a TARDIS",
   "message.artronindustries.door.unlinked": "This door is not linked to a TARDIS",

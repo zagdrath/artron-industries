@@ -12,6 +12,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.zagdrath.artronindustries.ArtronIndustries;
+import net.zagdrath.artronindustries.block.entity.HellBentDoorBlockEntity;
 import net.zagdrath.artronindustries.block.entity.InteriorDoorBlockEntity;
 import net.zagdrath.artronindustries.block.entity.InteriorDoorwayBlockEntity;
 import net.zagdrath.artronindustries.block.entity.TardisBlockEntity;
@@ -25,6 +26,8 @@ public final class ArtronBlockEntities {
             "interior_door", () -> new BlockEntityType<>(InteriorDoorBlockEntity::new, ArtronBlocks.INTERIOR_DOOR.get()));
     public static final Supplier<BlockEntityType<InteriorDoorwayBlockEntity>> INTERIOR_DOORWAY = BLOCK_ENTITY_TYPES.register(
             "interior_doorway", () -> new BlockEntityType<>(InteriorDoorwayBlockEntity::new, ArtronBlocks.INTERIOR_DOORWAY.get()));
+    public static final Supplier<BlockEntityType<HellBentDoorBlockEntity>> HELL_BENT_DOOR = BLOCK_ENTITY_TYPES.register(
+            "hell_bent_door", () -> new BlockEntityType<>(HellBentDoorBlockEntity::new, ArtronBlocks.HELL_BENT_DOOR.get()));
 
     static {
         // Was test_exterior_door; see ArtronBlocks.

@@ -13,8 +13,10 @@ import net.minecraft.world.level.material.PushReaction;
 import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.zagdrath.artronindustries.ArtronIndustries;
+import net.zagdrath.artronindustries.block.HellBentDoorBlock;
 import net.zagdrath.artronindustries.block.InteriorDoorBlock;
 import net.zagdrath.artronindustries.block.InteriorDoorwayBlock;
+import net.zagdrath.artronindustries.block.RoundelBlock;
 import net.zagdrath.artronindustries.block.TardisBlock;
 import net.zagdrath.artronindustries.block.TardisTopBlock;
 
@@ -32,6 +34,14 @@ public final class ArtronBlocks {
     public static final DeferredBlock<InteriorDoorBlock> INTERIOR_DOOR = ArtronIndustries.BLOCKS.registerBlock(
             "interior_door", InteriorDoorBlock::new,
             p -> p.mapColor(MapColor.SNOW).strength(3.0F, 1200.0F).sound(SoundType.METAL).noOcclusion().pushReaction(PushReaction.IMMOVEABLE));
+    /** The Hell Bent roundel door: a 2x3 interior door, one block per cell (see HellBentDoorBlock). */
+    public static final DeferredBlock<HellBentDoorBlock> HELL_BENT_DOOR = ArtronIndustries.BLOCKS.registerBlock(
+            "hell_bent_door", HellBentDoorBlock::new,
+            p -> p.mapColor(MapColor.STONE).strength(3.0F, 1200.0F).sound(SoundType.STONE).noOcclusion().pushReaction(PushReaction.IMMOVEABLE));
+    /** A TARDIS roundel wall. */
+    public static final DeferredBlock<RoundelBlock> ROUNDEL = ArtronIndustries.BLOCKS.registerBlock(
+            "roundel", RoundelBlock::new,
+            p -> p.mapColor(MapColor.STONE).strength(1.5F, 6.0F).sound(SoundType.STONE).requiresCorrectToolForDrops());
     /** A cell of a template interior's door (see InteriorDoorway). Placed only by interior generation; no item, no drops. */
     public static final DeferredBlock<InteriorDoorwayBlock> INTERIOR_DOORWAY = ArtronIndustries.BLOCKS.registerBlock(
             "interior_doorway", InteriorDoorwayBlock::new,
@@ -39,6 +49,8 @@ public final class ArtronBlocks {
 
     public static final DeferredItem<BlockItem> TARDIS_ITEM = ArtronIndustries.ITEMS.registerSimpleBlockItem(TARDIS);
     public static final DeferredItem<BlockItem> INTERIOR_DOOR_ITEM = ArtronIndustries.ITEMS.registerSimpleBlockItem(INTERIOR_DOOR);
+    public static final DeferredItem<BlockItem> HELL_BENT_DOOR_ITEM = ArtronIndustries.ITEMS.registerSimpleBlockItem(HELL_BENT_DOOR);
+    public static final DeferredItem<BlockItem> ROUNDEL_ITEM = ArtronIndustries.ITEMS.registerSimpleBlockItem(ROUNDEL);
 
     static {
         // The TARDIS was test_exterior_door (and test_exterior_top) before it was the real thing; worlds from then keep it.

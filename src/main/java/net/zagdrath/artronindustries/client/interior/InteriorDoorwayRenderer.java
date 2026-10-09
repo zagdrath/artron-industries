@@ -30,6 +30,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.zagdrath.artronindustries.block.entity.InteriorDoorwayBlockEntity;
+import net.zagdrath.artronindustries.block.entity.InteriorDoubleDoorBlockEntity;
 import net.zagdrath.artronindustries.portal.PortalShape;
 import net.zagdrath.artronindustries.tardis.interior.InteriorDoorway;
 
@@ -77,20 +78,9 @@ public class InteriorDoorwayRenderer implements BlockEntityRenderer<InteriorDoor
             return;
         }
         Direction facing = door.getFacing();
-        Direction right = PortalShape.right(facing);
-        // Turning by +90 degrees about Y takes (x, z) to (z, -x); the left leaf turns whichever way takes right onto facing.
-        float sign = right.getStepZ() == facing.getStepX() && -right.getStepX() == facing.getStepZ() ? 1.0F : -1.0F;
         float plane = 0.5F - doorway.planeDepth();
-        // Seen through the exterior (a copy made from the view's snapshot, not the door in the world), the doors are always
-        // open: that view only shows while the exterior's doors are, and the copy's door state lags the real one, which
-        // would show the leaves' backs filling the doorway as the doors open and shut.
-        boolean throughExterior = door.getLevel() == null || door.getLevel().getBlockEntity(door.getBlockPos()) != door;
-        float leftOpen = throughExterior ? 1.0F : ease(door.leafOpenAmount(true, partialTicks));
-        float rightOpen = throughExterior ? 1.0F : ease(door.leafOpenAmount(false, partialTicks));
-        float leftAngle = sign * OPEN_DEGREES * leftOpen;
-        float rightAngle = -sign * OPEN_DEGREES * rightOpen;
-        Matrix4f leftHinge = hingeTurn(doorway.hinge(true), plane, right, facing, leftAngle);
-        Matrix4f rightHinge = hingeTurn(doorway.hinge(false), plane, right, facing, rightAngle);
+        Matrix4f leftHinge = leafTurn(door, true, doorway.hinge(true), plane, partialTicks);
+        Matrix4f rightHinge = leafTurn(door, false, doorway.hinge(false), plane, partialTicks);
         // The leaves themselves are squashed towards their front face to the doorway's leaf thickness.
         Matrix4f squash = squash(0.5F - doorway.leafFront(), facing, doorway.thickness());
         ClientLevel level = door.getLevel() instanceof ClientLevel clientLevel ? clientLevel : null;
@@ -116,6 +106,23 @@ public class InteriorDoorwayRenderer implements BlockEntityRenderer<InteriorDoor
             }
             state.pieces.add(new Piece(pose, lit));
         }
+    }
+
+    /**
+     * Turns {@code door}'s {@code left} or right leaf about its hinge, {@code hingeRight} along right and {@code hingeFacing}
+     * along facing from the master cell's centre, out into the room as far as the leaf is open.
+     */
+    public static Matrix4f leafTurn(InteriorDoubleDoorBlockEntity door, boolean left, float hingeRight, float hingeFacing, float partialTicks) {
+        Direction facing = door.getFacing();
+        Direction right = PortalShape.right(facing);
+        // Turning by +90 degrees about Y takes (x, z) to (z, -x); the left leaf turns whichever way takes right onto facing.
+        float sign = right.getStepZ() == facing.getStepX() && -right.getStepX() == facing.getStepZ() ? 1.0F : -1.0F;
+        // Seen through the exterior (a copy made from the view's snapshot, not the door in the world), the doors are always
+        // open: that view only shows while the exterior's doors are, and the copy's door state lags the real one, which
+        // would show the leaves' backs filling the doorway as the doors open and shut.
+        boolean throughExterior = door.getLevel() == null || door.getLevel().getBlockEntity(door.getBlockPos()) != door;
+        float open = throughExterior ? 1.0F : ease(door.leafOpenAmount(left, partialTicks));
+        return hingeTurn(hingeRight, hingeFacing, right, facing, (left ? sign : -sign) * OPEN_DEGREES * open);
     }
 
     /** Turns by {@code degrees} about the vertical line through the hinge, given relative to the master cell's centre. */

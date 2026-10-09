@@ -23,10 +23,13 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.zagdrath.artronindustries.ArtronIndustries;
+import net.zagdrath.artronindustries.block.RoundelBlock;
 import net.zagdrath.artronindustries.client.boti.BotiClientCache;
 import net.zagdrath.artronindustries.client.boti.BotiMeshCache;
 import net.zagdrath.artronindustries.client.boti.BotiRenderer;
+import net.zagdrath.artronindustries.gametest.SmokeTest;
 import net.zagdrath.artronindustries.portal.DoorPairTransform;
+import net.zagdrath.artronindustries.portal.PortalShape;
 import net.zagdrath.artronindustries.portal.PortalSide;
 import net.zagdrath.artronindustries.registry.ArtronBlocks;
 import net.zagdrath.artronindustries.tardis.TardisInteriorManager;
@@ -55,6 +58,12 @@ public final class ClientSmokeTest {
     private @Nullable TardisRecord record;
     /** A Victorian Parlour TARDIS, for its doorway. */
     private @Nullable TardisRecord parlour;
+    /** A starter-room TARDIS with a Hell Bent door placed as its interior door. */
+    private @Nullable TardisRecord hellBent;
+    /** Ticks the Hell Bent door's leaves take to swing. */
+    private static final int HELL_BENT_SWING = net.zagdrath.artronindustries.block.HellBentDoorBlock.SOUNDS.swingTicks();
+    /** The outside corner of the roundel walls: wall A runs west from it facing south, wall B north from it facing east. */
+    private BlockPos roundelCorner = BlockPos.ZERO;
     private BlockPos ground = BlockPos.ZERO;
 
     private ClientSmokeTest() {}
@@ -149,6 +158,72 @@ public final class ClientSmokeTest {
 
     private Vec3 doorCenter(PortalSide side) {
         return this.record.shape(side).center(this.record.doorPos(side), this.record.doorFacing(side));
+    }
+
+    private Vec3 hellBentDoor() {
+        return this.hellBent.shape(PortalSide.INTERIOR).center(this.hellBent.interiorDoorPos(), this.hellBent.interiorDoorFacing());
+    }
+
+    private Vec3 hellBentFacing() {
+        return Vec3.atLowerCornerOf(this.hellBent.interiorDoorFacing().getUnitVec3i());
+    }
+
+    private Vec3 hellBentRight() {
+        return Vec3.atLowerCornerOf(PortalShape.right(this.hellBent.interiorDoorFacing()).getUnitVec3i());
+    }
+
+    private static boolean renderedIn(boolean interior) {
+        Minecraft mc = Minecraft.getInstance();
+        return TardisInteriorManager.isInterior(mc.level) == interior && mc.levelRenderer.hasRenderedAllSections();
+    }
+
+    /** The outside corner's vertical edge, at eye height, and a point looking at it from the south-east. */
+    private Vec3 outsideCornerEdge() {
+        return Vec3.atLowerCornerOf(this.roundelCorner).add(1.0, 1.5, 1.0);
+    }
+
+    private Vec3 outsideCornerEye() {
+        return this.outsideCornerEdge().add(2.0, -1.4, 2.0);
+    }
+
+    /** The inside corner's edge, where wall C's front meets wall A's, and a point looking into it. */
+    private Vec3 insideCornerEdge() {
+        return Vec3.atLowerCornerOf(this.roundelCorner).add(-5.0, 1.5, 1.0);
+    }
+
+    private Vec3 insideCornerEye() {
+        return this.insideCornerEdge().add(2.2, -1.4, 2.2);
+    }
+
+    /** A roundel placed as a player would place it, its offset from where it is along the wall. */
+    private static void roundel(ServerLevel level, BlockPos pos, Direction facing) {
+        level.setBlockAndUpdate(pos, ArtronBlocks.ROUNDEL.get().defaultBlockState().setValue(RoundelBlock.FACING, facing)
+                .setValue(RoundelBlock.OFFSET, RoundelBlock.offsetAt(pos, facing)));
+    }
+
+    /** Sneak-uses {@code pos} with an empty hand, as a player fixing a corner would. */
+    private static void sneakUse(ServerLevel level, BlockPos pos, Direction face) {
+        ServerPlayer player = level.getServer().getPlayerList().getPlayers().getFirst();
+        net.minecraft.world.item.ItemStack held = player.getMainHandItem();
+        player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, net.minecraft.world.item.ItemStack.EMPTY);
+        player.setShiftKeyDown(true);
+        level.getBlockState(pos).useWithoutItem(level, player, new net.minecraft.world.phys.BlockHitResult(Vec3.atCenterOf(pos), face, pos, false));
+        player.setShiftKeyDown(false);
+        player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, held);
+    }
+
+    /**
+     * Whether the faces either side of the edge between {@code a}'s {@code aFace} and {@code b}'s {@code bFace} (two faces in
+     * one plane, side by side) show different roundel textures, as the stagger needs.
+     */
+    private static boolean staggers(ServerLevel level, BlockPos a, Direction aFace, BlockPos b, Direction bFace) {
+        return showsWhole(level.getBlockState(a), aFace) != showsWhole(level.getBlockState(b), bFace);
+    }
+
+    /** Whether {@code face} of a roundel block shows the whole roundel (rather than the shifted one). */
+    private static boolean showsWhole(net.minecraft.world.level.block.state.BlockState state, Direction face) {
+        boolean front = face == state.getValue(RoundelBlock.FACING);
+        return front != state.getValue(RoundelBlock.OFFSET);
     }
 
     private void define() {
@@ -431,6 +506,237 @@ public final class ClientSmokeTest {
             }, null, 1);
         }
         this.step("parlour_back_check", () -> checkFacing("backwards walk out", this.parlour.exteriorFacing().getOpposite()), null, 0);
+        // Phase 9: roundel walls. Wall A runs west from an outside corner, facing south; wall B runs north from it, facing
+        // east; wall C stands at A's west end, facing east, making an inside corner. Each block is offset as placed.
+        this.step("roundel_setup", () -> onServer(server -> {
+            ServerLevel level = server.overworld();
+            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "gamemode creative @a");
+            BlockPos base = level.getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, this.ground.offset(-20, 0, 12));
+            this.roundelCorner = base;
+            for (int dx = -10; dx <= 6; dx++) {
+                for (int dz = -8; dz <= 8; dz++) {
+                    level.setBlockAndUpdate(base.offset(dx, -1, dz), Blocks.SMOOTH_STONE.defaultBlockState());
+                    for (int dy = 0; dy <= 5; dy++) {
+                        level.setBlockAndUpdate(base.offset(dx, dy, dz), Blocks.AIR.defaultBlockState());
+                    }
+                }
+            }
+            for (int dy = 0; dy < 3; dy++) {
+                for (int k = 0; k <= 5; k++) {
+                    roundel(level, base.offset(-k, dy, 0), Direction.SOUTH);
+                }
+                for (int k = 1; k <= 4; k++) {
+                    roundel(level, base.offset(0, dy, -k), Direction.EAST);
+                }
+                for (int k = 1; k <= 3; k++) {
+                    roundel(level, base.offset(-6, dy, k), Direction.EAST);
+                }
+            }
+            place(level, Vec3.atBottomCenterOf(base).add(4.5, 0.0, 5.5), Vec3.atCenterOf(base.above()).add(-1.5, 0.0, 0.0));
+            server.getPlayerList().getPlayers().getFirst().getInventory().setItem(6, ArtronBlocks.ROUNDEL_ITEM.get().getDefaultInstance());
+            server.getPlayerList().getPlayers().getFirst().getInventory().setItem(7, ArtronBlocks.HELL_BENT_DOOR_ITEM.get().getDefaultInstance());
+        }), null, 0);
+        this.step("roundel_shot", () -> {
+            shot("roundel_walls_as_placed");
+            onServer(server -> {
+                ServerLevel level = server.overworld();
+                BlockPos c = this.roundelCorner;
+                boolean outside = staggers(level, c, Direction.EAST, c.north(), Direction.EAST);
+                boolean inside = staggers(level, c.west(5), Direction.SOUTH, c.offset(-6, 0, 1), Direction.EAST);
+                boolean straight = staggers(level, c, Direction.SOUTH, c.west(), Direction.SOUTH) && staggers(level, c.north(), Direction.EAST, c.north(2), Direction.EAST);
+                ArtronIndustries.LOGGER.info("CLIENT SMOKE roundels as placed: straight walls stagger {}, outside corner {}, inside corner {}", straight, outside, inside);
+                if (!straight) {
+                    ArtronIndustries.LOGGER.error("CLIENT SMOKE FAILED: a straight roundel wall does not stagger");
+                }
+                place(level, this.outsideCornerEye(), this.outsideCornerEdge());
+            });
+        }, () -> renderedIn(false), 20);
+        this.step("roundel_outside_before_shot", () -> {
+            shot("roundel_outside_corner_as_placed");
+            onServer(server -> place(server.overworld(), this.insideCornerEye(), this.insideCornerEdge()));
+        }, null, 20);
+        this.step("roundel_inside_before_shot", () -> shot("roundel_inside_corner_as_placed"), null, 20);
+        // Corners the parity rule gets wrong are fixed by sneak-using every block of the wall that meets wall A.
+        this.step("roundel_toggle", () -> onServer(server -> {
+            ServerLevel level = server.overworld();
+            BlockPos c = this.roundelCorner;
+            boolean outside = staggers(level, c, Direction.EAST, c.north(), Direction.EAST);
+            boolean inside = staggers(level, c.west(5), Direction.SOUTH, c.offset(-6, 0, 1), Direction.EAST);
+            for (int dy = 0; dy < 3; dy++) {
+                for (int k = 1; !outside && k <= 4; k++) {
+                    sneakUse(level, c.offset(0, dy, -k), Direction.EAST);
+                }
+                for (int k = 1; !inside && k <= 3; k++) {
+                    sneakUse(level, c.offset(-6, dy, k), Direction.EAST);
+                }
+            }
+            boolean fixed = staggers(level, c, Direction.EAST, c.north(), Direction.EAST)
+                    && staggers(level, c.west(5), Direction.SOUTH, c.offset(-6, 0, 1), Direction.EAST);
+            if (fixed) {
+                ArtronIndustries.LOGGER.info("CLIENT SMOKE roundel corners line up (toggled outside: {}, inside: {})", !outside, !inside);
+            } else {
+                ArtronIndustries.LOGGER.error("CLIENT SMOKE FAILED: sneak-using did not line the roundel corners up");
+            }
+        }), null, 0);
+        this.step("roundel_inside_after_shot", () -> {
+            shot("roundel_inside_corner");
+            onServer(server -> place(server.overworld(), this.outsideCornerEye(), this.outsideCornerEdge()));
+        }, null, 20);
+        this.step("roundel_outside_after_shot", () -> {
+            shot("roundel_outside_corner");
+            onServer(server -> place(server.overworld(), Vec3.atBottomCenterOf(this.roundelCorner).add(4.5, 0.0, 5.5),
+                    Vec3.atCenterOf(this.roundelCorner.above()).add(-1.5, 0.0, 0.0)));
+        }, null, 20);
+        this.step("roundel_walls_shot", () -> shot("roundel_walls"), null, 20);
+        // Phase 10: the Hell Bent door, placed by hand as a starter room's interior door (west wall, facing east).
+        this.step("hellbent_setup", () -> onServer(server -> {
+            ServerLevel level = server.overworld();
+            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "time set noon");
+            BlockPos door = level.getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, this.ground.offset(32, 0, 0));
+            for (int dy = 0; dy < 3; dy++) {
+                level.setBlockAndUpdate(door.above(dy), Blocks.AIR.defaultBlockState());
+            }
+            this.hellBent = ArtronBlocks.TARDIS.get().placeNewTardis(level, door, Direction.SOUTH, TardisExteriors.DEFAULT, TardisInteriors.STARTER);
+            TardisInteriorManager.get(server).ensureInterior(server, this.hellBent);
+            ServerLevel interior = TardisInteriorManager.interiorLevel(server);
+            BlockPos master = SmokeTest.hellBentDoorPos(this.hellBent);
+            if (!SmokeTest.placeHellBentDoor(interior, master, Direction.EAST)) {
+                throw new IllegalStateException("could not place the Hell Bent door");
+            }
+            // Set in a roundel wall, staggered round it, so the shut door can be compared with the blocks beside it. Seen
+            // from the room (looking west) the door's columns show whole roundels, so the columns either side are offset.
+            for (int dy = 0; dy < 4; dy++) {
+                for (int dz : new int[]{-3, -2, 1, 2}) {
+                    BlockPos pos = master.offset(0, dy, dz);
+                    interior.setBlockAndUpdate(pos, ArtronBlocks.ROUNDEL.get().defaultBlockState().setValue(RoundelBlock.FACING, Direction.EAST)
+                            .setValue(RoundelBlock.OFFSET, dz == -2 || dz == 1));
+                }
+            }
+            for (int dz = -1; dz <= 0; dz++) {
+                interior.setBlockAndUpdate(master.offset(0, 3, dz), ArtronBlocks.ROUNDEL.get().defaultBlockState().setValue(RoundelBlock.FACING, Direction.EAST));
+            }
+        }), null, 0);
+        // Only once the new room's light has been worked out: chunks sent before that show it unlit.
+        this.step("hellbent_enter", () -> onServer(server -> {
+            Vec3 inDoor = this.hellBentDoor();
+            place(TardisInteriorManager.interiorLevel(server), inDoor.add(this.hellBentFacing().scale(4.5)).subtract(0.0, 1.5, 0.0), inDoor);
+        }), null, 60);
+        this.step("hellbent_shut_shot", () -> shot("hellbent_shut"), () -> renderedIn(true), 40);
+        this.step("hellbent_right", () -> onServer(server -> TardisInteriorManager.get(server).setDoorState(server, this.hellBent, DoorState.RIGHT_OPEN)), null, 0);
+        this.step("hellbent_opening_shot", () -> shot("hellbent_opening"), null, HELL_BENT_SWING / 2);
+        this.step("hellbent_one_open_shot", () -> shot("hellbent_one_open"), () -> viewReady(this.hellBent, PortalSide.INTERIOR), HELL_BENT_SWING / 2 + 5);
+        this.step("hellbent_both", () -> onServer(server -> TardisInteriorManager.get(server).setDoorState(server, this.hellBent, DoorState.BOTH_OPEN)), null, 0);
+        this.step("hellbent_both_opening_shot", () -> shot("hellbent_both_opening"), null, HELL_BENT_SWING / 3);
+        this.step("hellbent_open_shot", () -> shot("hellbent_open"), () -> viewReady(this.hellBent, PortalSide.INTERIOR), HELL_BENT_SWING + 5);
+        for (int side = -1; side <= 1; side += 2) {
+            int s = side;
+            String name = side < 0 ? "left" : "right";
+            this.step("hellbent_angle_" + name, () -> onServer(server -> {
+                Vec3 inDoor = this.hellBentDoor();
+                place(TardisInteriorManager.interiorLevel(server), inDoor.add(this.hellBentFacing().scale(3.0)).add(this.hellBentRight().scale(3.0 * s))
+                        .subtract(0.0, 1.5, 0.0), inDoor);
+            }), null, 0);
+            this.step("hellbent_angle_" + name + "_shot", () -> shot("hellbent_angle_" + name), null, 20);
+        }
+        // Close by, along the wall: the leaves' 4 px edges, the frame's scallops and the leaf swung out beside them.
+        this.step("hellbent_edge", () -> onServer(server -> {
+            Vec3 inDoor = this.hellBentDoor();
+            place(TardisInteriorManager.interiorLevel(server), inDoor.add(this.hellBentFacing().scale(1.6)).add(this.hellBentRight().scale(2.2))
+                    .subtract(0.0, 1.9, 0.0), inDoor.subtract(this.hellBentRight().scale(0.9)).add(0.0, 0.3, 0.0));
+        }), null, 0);
+        this.step("hellbent_edge_shot", () -> shot("hellbent_edge"), null, 20);
+        this.step("hellbent_edge_close", () -> onServer(server -> TardisInteriorManager.get(server).setDoorState(server, this.hellBent, DoorState.CLOSED)), null, 0);
+        this.step("hellbent_edge_closing_shot", () -> shot("hellbent_edge_closing"), null, HELL_BENT_SWING / 2);
+        this.step("hellbent_edge_shut_shot", () -> shot("hellbent_edge_shut"), null, HELL_BENT_SWING / 2 + 5);
+        this.step("hellbent_angle_reopen", () -> onServer(server -> {
+            TardisInteriorManager.get(server).setDoorState(server, this.hellBent, DoorState.BOTH_OPEN);
+            Vec3 inDoor = this.hellBentDoor();
+            place(TardisInteriorManager.interiorLevel(server), inDoor.add(this.hellBentFacing().scale(3.0)).add(this.hellBentRight().scale(-2.5))
+                    .subtract(0.0, 1.5, 0.0), inDoor);
+        }), null, 0);
+        this.step("hellbent_angle_opening_shot", () -> shot("hellbent_angle_opening"), null, HELL_BENT_SWING * 2 / 3);
+        // Looking in from outside, through the police box: the door, open, at the far side.
+        this.step("hellbent_outside", () -> onServer(server -> {
+            Vec3 exDoor = this.hellBent.exteriorShape().center(this.hellBent.exteriorDoorPos(), this.hellBent.exteriorFacing());
+            Vec3 out = Vec3.atLowerCornerOf(this.hellBent.exteriorFacing().getUnitVec3i());
+            place(server.overworld(), exDoor.add(out.scale(2.5)).subtract(0.0, 1.3, 0.0), exDoor);
+        }), null, HELL_BENT_SWING);
+        this.step("hellbent_outside_shot", () -> shot("hellbent_outside_in"), () -> viewReady(this.hellBent, PortalSide.EXTERIOR) && renderedIn(false), 40);
+        this.step("hellbent_outside_angle", () -> onServer(server -> {
+            Vec3 exDoor = this.hellBent.exteriorShape().center(this.hellBent.exteriorDoorPos(), this.hellBent.exteriorFacing());
+            Vec3 out = Vec3.atLowerCornerOf(this.hellBent.exteriorFacing().getUnitVec3i());
+            Vec3 side = Vec3.atLowerCornerOf(PortalShape.right(this.hellBent.exteriorFacing()).getUnitVec3i());
+            place(server.overworld(), exDoor.add(out.scale(1.5)).add(side.scale(-1.2)).subtract(0.0, 1.3, 0.0), exDoor.subtract(out.scale(4.0)));
+        }), null, 0);
+        this.step("hellbent_outside_angle_shot", () -> shot("hellbent_outside_angle"), null, 30);
+        // Walk out through the Hell Bent door, then back in through the police box.
+        this.step("hellbent_walk_out_setup", () -> onServer(server -> {
+            Vec3 anchor = this.hellBent.interiorShape().anchor(this.hellBent.interiorDoorPos(), this.hellBent.interiorDoorFacing());
+            place(TardisInteriorManager.interiorLevel(server), anchor.add(this.hellBentFacing().scale(3.0)),
+                    anchor.add(0.0, 1.62, 0.0).subtract(this.hellBentFacing().scale(2.0)));
+        }), null, 0);
+        this.step("hellbent_walk_out_go", () -> Minecraft.getInstance().options.keyUp.setDown(true), () -> renderedIn(true), 20);
+        for (int i = 0; i < 16; i++) {
+            String name = String.format("hellbent_walk_out_%02d", i);
+            this.step(name, () -> {
+                Minecraft.getInstance().options.keyUp.setDown(true);
+                walk(0.3);
+                if (name.endsWith("08") || name.endsWith("10") || name.endsWith("12")) {
+                    shot(name);
+                }
+            }, null, 2);
+        }
+        this.step("hellbent_walk_out_stop", () -> {
+            Minecraft mc = Minecraft.getInstance();
+            mc.options.keyUp.setDown(false);
+            if (TardisInteriorManager.isInterior(mc.level)) {
+                ArtronIndustries.LOGGER.error("CLIENT SMOKE FAILED: did not walk out through the Hell Bent door ({})", mc.player.position());
+            } else {
+                ArtronIndustries.LOGGER.info("CLIENT SMOKE walked out through the Hell Bent door: now at {}", mc.player.position());
+            }
+            checkFacing("Hell Bent walk out", this.hellBent.exteriorFacing());
+        }, null, 10);
+        this.step("hellbent_walk_in_setup", () -> onServer(server -> {
+            Vec3 anchor = this.hellBent.exteriorShape().anchor(this.hellBent.exteriorDoorPos(), this.hellBent.exteriorFacing());
+            Vec3 out = Vec3.atLowerCornerOf(this.hellBent.exteriorFacing().getUnitVec3i());
+            place(server.overworld(), anchor.add(out.scale(3.0)), anchor.add(0.0, 1.62, 0.0).subtract(out.scale(2.0)));
+        }), null, 10);
+        this.step("hellbent_walk_in_go", () -> Minecraft.getInstance().options.keyUp.setDown(true), () -> renderedIn(false), 20);
+        for (int i = 0; i < 16; i++) {
+            String name = String.format("hellbent_walk_in_%02d", i);
+            this.step(name, () -> {
+                Minecraft.getInstance().options.keyUp.setDown(true);
+                walk(0.3);
+                if (name.endsWith("10") || name.endsWith("12")) {
+                    shot(name);
+                }
+            }, null, 2);
+        }
+        this.step("hellbent_walk_in_stop", () -> {
+            Minecraft mc = Minecraft.getInstance();
+            mc.options.keyUp.setDown(false);
+            if (!TardisInteriorManager.isInterior(mc.level)) {
+                ArtronIndustries.LOGGER.error("CLIENT SMOKE FAILED: did not walk back in through the Hell Bent door ({})", mc.player.position());
+            } else {
+                ArtronIndustries.LOGGER.info("CLIENT SMOKE walked back in through the Hell Bent door: now at {}", mc.player.position());
+            }
+            checkFacing("Hell Bent walk in", this.hellBent.interiorDoorFacing());
+        }, null, 10);
+        this.step("hellbent_close", () -> onServer(server -> {
+            TardisInteriorManager.get(server).setDoorState(server, this.hellBent, DoorState.CLOSED);
+            Vec3 inDoor = this.hellBentDoor();
+            place(TardisInteriorManager.interiorLevel(server), inDoor.add(this.hellBentFacing().scale(4.5)).subtract(0.0, 1.5, 0.0), inDoor);
+        }), null, 0);
+        this.step("hellbent_closing_shot", () -> shot("hellbent_closing"), null, HELL_BENT_SWING / 2);
+        this.step("hellbent_closed_shot", () -> {
+            shot("hellbent_closed");
+            onServer(server -> {
+                ServerLevel interior = TardisInteriorManager.interiorLevel(server);
+                BlockPos master = this.hellBent.interiorDoorPos();
+                boolean collides = !interior.getBlockState(master).getCollisionShape(interior, master).isEmpty();
+                ArtronIndustries.LOGGER.info("CLIENT SMOKE Hell Bent door shut again, collides: {}", collides);
+            });
+        }, null, HELL_BENT_SWING / 2 + 5);
         this.step("quit", () -> {
             BotiRenderer.setDebugFloatingPos(null);
             ArtronIndustries.LOGGER.info("CLIENT SMOKE done: {}", String.format("rebuild %.2f ms, draw %.3f ms (%d doorways)",

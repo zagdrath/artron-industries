@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "particle": "artronindustries:block/roundel",
+    "north": "artronindustries:block/roundel_half",
+    "east": "artronindustries:block/roundel",
+    "south": "artronindustries:block/roundel",
+    "west": "artronindustries:block/roundel",
+    "up": "artronindustries:block/roundel_plain",
+    "down": "artronindustries:block/roundel_plain"
+  }
+}

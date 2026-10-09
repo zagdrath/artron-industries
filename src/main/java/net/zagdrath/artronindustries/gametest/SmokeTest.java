@@ -20,8 +20,10 @@ import net.minecraft.server.level.TicketType;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.context.DirectionalPlaceContext;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -32,6 +34,7 @@ import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.zagdrath.artronindustries.ArtronIndustries;
 import net.zagdrath.artronindustries.Config;
+import net.zagdrath.artronindustries.block.HellBentDoorBlock;
 import net.zagdrath.artronindustries.block.PortalDoorBlock;
 import net.zagdrath.artronindustries.boti.PortalSnapshot;
 import net.zagdrath.artronindustries.boti.PortalViewKey;
@@ -42,10 +45,13 @@ import net.zagdrath.artronindustries.registry.ArtronBlocks;
 import net.zagdrath.artronindustries.tardis.TardisInteriorManager;
 import net.zagdrath.artronindustries.tardis.TardisRecord;
 import net.zagdrath.artronindustries.block.InteriorDoorwayBlock;
+import net.zagdrath.artronindustries.block.entity.HellBentDoorBlockEntity;
 import net.zagdrath.artronindustries.block.entity.InteriorDoorwayBlockEntity;
+import net.zagdrath.artronindustries.portal.OpenSpan;
 import net.zagdrath.artronindustries.portal.PortalShape;
 import net.zagdrath.artronindustries.tardis.DoorSounds;
 import net.zagdrath.artronindustries.tardis.DoorState;
+import net.zagdrath.artronindustries.tardis.InteriorGenerator;
 import net.zagdrath.artronindustries.tardis.exterior.TardisExteriors;
 import net.zagdrath.artronindustries.tardis.interior.TardisInteriors;
 
@@ -70,6 +76,8 @@ public final class SmokeTest {
     private static boolean keepOpen;
     private @Nullable TardisRecord leftover;
     private @Nullable TardisRecord parlour;
+    /** A starter-room TARDIS whose interior door is a Hell Bent door placed in its west wall. */
+    private @Nullable TardisRecord hellBent;
 
     private SmokeTest() {}
 
@@ -82,6 +90,24 @@ public final class SmokeTest {
             NeoForge.EVENT_BUS.addListener(ServerStartedEvent.class, e -> ArtronIndustries.LOGGER.info("ARTRON SMOKE TEST starting"));
             NeoForge.EVENT_BUS.addListener(ServerTickEvent.Post.class, e -> test.tick(e.getServer()));
         }
+    }
+
+    /**
+     * Places a Hell Bent door as a player standing in front of it would, its bottom left cell at {@code master} and facing
+     * {@code facing}, clearing whatever is where it goes first. Returns whether it was placed.
+     */
+    public static boolean placeHellBentDoor(ServerLevel level, BlockPos master, Direction facing) {
+        for (int index = 0; index < HellBentDoorBlock.DOORWAY.cellCount(); index++) {
+            level.setBlockAndUpdate(HellBentDoorBlock.DOORWAY.cell(master, facing, index), Blocks.AIR.defaultBlockState());
+        }
+        ItemStack stack = ArtronBlocks.HELL_BENT_DOOR_ITEM.get().getDefaultInstance();
+        return ArtronBlocks.HELL_BENT_DOOR_ITEM.get().place(new DirectionalPlaceContext(level, master, facing.getOpposite(), stack, Direction.UP))
+                .consumesAction();
+    }
+
+    /** Where the Hell Bent door goes in a starter room: in the west wall, facing east into the room, clear of the glass. */
+    public static BlockPos hellBentDoorPos(TardisRecord record) {
+        return record.interiorOrigin().offset(-InteriorGenerator.HALF - 1, 1, 3);
     }
 
     private static void check(boolean condition, String message) {
@@ -245,6 +271,100 @@ public final class SmokeTest {
             check(!interior.getBlockState(this.parlour.interiorOrigin().offset(12, 2, 39)).getValue(InteriorDoorwayBlock.OPEN),
                     "deleting the TARDIS left its doorway open");
         });
+        // The Hell Bent door, placed by hand in a starter room's west wall: it becomes the interior door, all six cells of it.
+        this.steps.add(server -> {
+            ServerLevel overworld = server.overworld();
+            BlockPos ground = overworld.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, new BlockPos(40, 0, 8));
+            for (int dy = 0; dy < 3; dy++) {
+                overworld.setBlockAndUpdate(ground.above(dy), Blocks.AIR.defaultBlockState());
+            }
+            this.hellBent = ArtronBlocks.TARDIS.get().placeNewTardis(overworld, ground, Direction.SOUTH, TardisExteriors.DEFAULT, TardisInteriors.STARTER);
+            check(this.hellBent != null, "could not place the Hell Bent door's TARDIS");
+            TardisInteriorManager manager = TardisInteriorManager.get(server);
+            check(manager.ensureInterior(server, this.hellBent), "Hell Bent door's TARDIS interior not generated");
+            // Things thrown through the doorways have to tick on both sides.
+            overworld.getChunkSource().addTicketWithRadius(TicketType.PORTAL, ChunkPos.containing(ground), 3);
+            ServerLevel interior = TardisInteriorManager.interiorLevel(server);
+            BlockPos oldDoor = this.hellBent.interiorDoorPos();
+            BlockPos master = hellBentDoorPos(this.hellBent);
+            interior.getChunkSource().addTicketWithRadius(TicketType.PORTAL, ChunkPos.containing(master), 3);
+            check(placeHellBentDoor(interior, master, Direction.EAST), "could not place the Hell Bent door");
+            check(master.equals(this.hellBent.interiorDoorPos()) && this.hellBent.interiorDoorFacing() == Direction.EAST
+                    && this.hellBent.interiorShape().equals(HellBentDoorBlock.DOORWAY.shape()), "the Hell Bent door did not become the interior door");
+            check(interior.getBlockEntity(oldDoor) instanceof PortalDoorBlockEntity old && old.getTardisId() == null, "the old interior door is still linked");
+            for (int index = 0; index < HellBentDoorBlock.DOORWAY.cellCount(); index++) {
+                BlockPos pos = HellBentDoorBlock.DOORWAY.cell(master, Direction.EAST, index);
+                var cell = interior.getBlockState(pos);
+                check(cell.is(ArtronBlocks.HELL_BENT_DOOR.get()) && cell.getValue(HellBentDoorBlock.COLUMN) == HellBentDoorBlock.DOORWAY.i(index)
+                        && cell.getValue(HellBentDoorBlock.ROW) == HellBentDoorBlock.DOORWAY.j(index), "Hell Bent door cell " + index + " missing at " + pos);
+                check(!cell.getCollisionShape(interior, pos).isEmpty(), "shut Hell Bent cell " + index + " does not collide");
+            }
+            check(interior.getBlockEntity(master) instanceof HellBentDoorBlockEntity d && this.hellBent.uuid().equals(d.getTardisId())
+                    && d.swingTicks() == HellBentDoorBlock.SOUNDS.swingTicks(), "Hell Bent door not linked or not swinging with its own sounds");
+            manager.setDoorState(server, this.hellBent, DoorState.RIGHT_OPEN);
+            // Its left leaf (from the room, looking west: the south column) opens with the exterior's right one.
+            BlockPos rightColumn = HellBentDoorBlock.DOORWAY.cell(master, Direction.EAST, HellBentDoorBlock.DOORWAY.index(1, 0, 0));
+            check(interior.getBlockState(master.above(2)).getValue(HellBentDoorBlock.OPEN)
+                    && !interior.getBlockState(rightColumn).getValue(HellBentDoorBlock.OPEN), "the wrong Hell Bent leaf opened first");
+            manager.setDoorState(server, this.hellBent, DoorState.BOTH_OPEN);
+            for (int index = 0; index < HellBentDoorBlock.DOORWAY.cellCount(); index++) {
+                BlockPos pos = HellBentDoorBlock.DOORWAY.cell(master, Direction.EAST, index);
+                check(interior.getBlockState(pos).getCollisionShape(interior, pos).isEmpty(), "open Hell Bent cell " + index + " still collides");
+            }
+            this.wait = HellBentDoorBlock.SOUNDS.swingTicks() + 2;
+        });
+        // Thrown out near the right edge of its 2-wide doorway, an item comes out in front of the police box's doors.
+        this.steps.add(server -> {
+            PortalDoorBlockEntity door = TardisInteriorManager.get(server).loadedDoor(server, this.hellBent, PortalSide.INTERIOR);
+            check(door != null && door.getPassableSpan().equals(OpenSpan.FULL), "the open Hell Bent door is not passable");
+            ServerLevel interior = TardisInteriorManager.interiorLevel(server);
+            Direction facing = this.hellBent.interiorDoorFacing();
+            Vec3 anchor = this.hellBent.interiorShape().anchor(this.hellBent.interiorDoorPos(), facing);
+            Vec3 in = Vec3.atLowerCornerOf(facing.getUnitVec3i());
+            Vec3 from = anchor.add(in.scale(2.0)).add(Vec3.atLowerCornerOf(PortalShape.right(facing).getUnitVec3i()).scale(0.7)).add(0.0, 1.0, 0.0);
+            ItemEntity item = new ItemEntity(interior, from.x, from.y, from.z, new ItemStack(Items.EMERALD));
+            item.setDeltaMovement(in.scale(-0.45).add(0.0, 0.15, 0.0));
+            interior.addFreshEntity(item);
+            this.waitFor(() -> itemNear(server.overworld(), this.hellBent.exteriorDoorPos(), Items.EMERALD) != null, 100);
+        });
+        // And one thrown in at the police box comes out of the Hell Bent doorway, into the room.
+        this.steps.add(server -> {
+            ItemEntity out = itemNear(server.overworld(), this.hellBent.exteriorDoorPos(), Items.EMERALD);
+            double lateral = this.hellBent.exteriorShape().lateral(this.hellBent.exteriorDoorPos(), this.hellBent.exteriorFacing(), out.position());
+            check(Math.abs(lateral) <= this.hellBent.exteriorShape().width() / 2.0, "came out beside the exterior doors, " + lateral + " off centre");
+            out.discard();
+            ServerLevel overworld = server.overworld();
+            Vec3 anchor = this.hellBent.exteriorShape().anchor(this.hellBent.exteriorDoorPos(), this.hellBent.exteriorFacing());
+            Vec3 outward = Vec3.atLowerCornerOf(this.hellBent.exteriorFacing().getUnitVec3i());
+            Vec3 from = anchor.add(outward.scale(2.0)).add(0.0, 1.0, 0.0);
+            ItemEntity item = new ItemEntity(overworld, from.x, from.y, from.z, new ItemStack(Items.DIAMOND));
+            item.setDeltaMovement(outward.scale(-0.45).add(0.0, 0.15, 0.0));
+            overworld.addFreshEntity(item);
+            this.waitFor(() -> itemNear(TardisInteriorManager.interiorLevel(server), this.hellBent.interiorDoorPos(), Items.DIAMOND) != null, 100);
+        });
+        // Shut, it collides again; broken anywhere, the whole door goes and drops one door.
+        this.steps.add(server -> {
+            ServerLevel interior = TardisInteriorManager.interiorLevel(server);
+            BlockPos master = this.hellBent.interiorDoorPos();
+            Direction facing = this.hellBent.interiorDoorFacing();
+            ItemEntity in = itemNear(interior, master, Items.DIAMOND);
+            PortalShape shape = this.hellBent.interiorShape();
+            check(Math.abs(shape.lateral(master, facing, in.position())) <= shape.width() / 2.0 && shape.signedDistance(master, facing, in.position()) > 0.0,
+                    "did not come out of the Hell Bent doorway: " + in.position());
+            in.discard();
+            TardisInteriorManager.get(server).setDoorState(server, this.hellBent, DoorState.CLOSED);
+            BlockPos topRight = HellBentDoorBlock.DOORWAY.cell(master, facing, HellBentDoorBlock.DOORWAY.cellCount() - 1);
+            check(!interior.getBlockState(topRight).getCollisionShape(interior, topRight).isEmpty(), "shut Hell Bent door does not collide again");
+            interior.destroyBlock(topRight, true);
+            for (int index = 0; index < HellBentDoorBlock.DOORWAY.cellCount(); index++) {
+                check(interior.getBlockState(HellBentDoorBlock.DOORWAY.cell(master, facing, index)).isAir(), "Hell Bent cell " + index + " left behind");
+            }
+            int drops = interior.getEntities((Entity) null, new AABB(master).inflate(4), e -> e instanceof ItemEntity i
+                    && i.getItem().is(ArtronBlocks.HELL_BENT_DOOR_ITEM.get())).stream().mapToInt(e -> ((ItemEntity) e).getItem().getCount()).sum();
+            check(drops == 1, "breaking the Hell Bent door dropped " + drops + " doors");
+            check(TardisInteriorManager.get(server).loadedDoor(server, this.hellBent, PortalSide.INTERIOR) == null, "broken Hell Bent door still linked");
+            TardisInteriorManager.get(server).delete(server, this.hellBent);
+        });
         this.steps.add(server -> {
             if (keepOpen) {
                 ArtronIndustries.LOGGER.info("ARTRON SMOKE TEST leaving TARDIS #{} open for the restart check", this.record.id());
@@ -261,8 +381,12 @@ public final class SmokeTest {
     }
 
     private @Nullable ItemEntity parlourEmerald(MinecraftServer server) {
-        return server.overworld().getEntities((Entity) null, new AABB(this.parlour.exteriorDoorPos()).inflate(6),
-                e -> e instanceof ItemEntity i && i.getItem().is(Items.EMERALD)).stream().map(ItemEntity.class::cast).findFirst().orElse(null);
+        return itemNear(server.overworld(), this.parlour.exteriorDoorPos(), Items.EMERALD);
+    }
+
+    private static @Nullable ItemEntity itemNear(ServerLevel level, BlockPos pos, Item item) {
+        return level.getEntities((Entity) null, new AABB(pos).inflate(6), e -> e instanceof ItemEntity i && i.getItem().is(item)).stream()
+                .map(ItemEntity.class::cast).findFirst().orElse(null);
     }
 
     private PortalViewKey key(PortalSide nearSide) {

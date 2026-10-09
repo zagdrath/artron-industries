@@ -122,13 +122,25 @@ public abstract class PortalDoorBlockEntity extends BlockEntity implements Porta
         this.sync();
     }
 
-    /** What this end of the doorway sounds like: its TARDIS's exterior's doors outside, its interior's inside. */
+    /**
+     * What this end of the doorway sounds like: this door's own sounds if it has any, otherwise its TARDIS's exterior's
+     * doors outside and its interior's inside.
+     */
     private DoorSounds doorSounds(ServerLevel level) {
+        DoorSounds own = this.ownDoorSounds();
+        if (own != null) {
+            return own;
+        }
         TardisRecord record = TardisInteriorManager.get(level.getServer()).get(this.tardisId);
         if (record == null) {
             return DoorSounds.IRON_DOOR;
         }
         return this.getPortalSide() == PortalSide.EXTERIOR ? record.exterior().doorSounds() : record.interior().doorSounds();
+    }
+
+    /** The sounds of a door that sounds the same whatever TARDIS it belongs to, such as a placeable interior door; or null. */
+    protected @Nullable DoorSounds ownDoorSounds() {
+        return null;
     }
 
     /** Shows the doors fully open, without animating, syncing or playing a sound: for client-side stand-ins. */
