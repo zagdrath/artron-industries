@@ -38,9 +38,10 @@ public final class ArtronClientCommands {
                         })))
                 .then(Commands.literal("stats").executes(ctx -> {
                     ctx.getSource().sendSuccess(() -> Component.literal(String.format(
-                            "BOTI: %d cached views, %d meshes, last rebuild %.2f ms, last frame %d doorways in %.3f ms%s",
+                            "BOTI: %d cached views, %d meshes, last rebuild %.2f ms (%d sections), last frame %d doorways (%d sections) in %.3f ms%s",
                             BotiClientCache.entries().size(), BotiMeshCache.meshCount(), BotiMeshCache.lastRebuildMs(),
-                            BotiRenderer.lastDrawCount(), BotiRenderer.lastDrawMs(), BotiRenderer.usesFallback() ? " (fallback)" : "")), false);
+                            BotiMeshCache.lastRebuildSections(), BotiRenderer.lastDrawCount(), BotiRenderer.lastSectionCount(),
+                            BotiRenderer.lastDrawMs(), BotiRenderer.usesFallback() ? " (fallback)" : "")), false);
                     return 1;
                 }))));
     }

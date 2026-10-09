@@ -14,6 +14,7 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
+import it.unimi.dsi.fastutil.ints.IntSet;
 import net.zagdrath.artronindustries.ArtronIndustries;
 import net.zagdrath.artronindustries.boti.PortalSnapshot;
 import net.zagdrath.artronindustries.boti.PortalViewKey;
@@ -29,10 +30,14 @@ public final class BotiClientCache {
     /** Ticks a cleared view stays around so a closing door can still show it while its animation finishes. */
     private static final int CLEAR_GRACE_TICKS = 20;
 
-    /** One cached view. {@code dirtyBlocks} accumulates changed indices until the mesh builder consumes them. */
+    /**
+     * One cached view. {@code dirtyBlocks} accumulates changed indices until the mesh builder takes them;
+     * {@code allDirty} means the whole snapshot was replaced.
+     */
     public static final class View {
         private PortalSnapshot snapshot;
         private boolean meshDirty = true;
+        private boolean allDirty = true;
         private boolean blockEntitiesDirty = true;
         private final IntOpenHashSet dirtyBlocks = new IntOpenHashSet();
         private int clearCountdown = -1;
@@ -61,9 +66,16 @@ public final class BotiClientCache {
             return this.meshDirty;
         }
 
-        public void clearMeshDirty() {
+        /**
+         * Takes what changed since the last call: the box-local indices of changed blocks, or null when the whole view
+         * has to be rebuilt (a new snapshot).
+         */
+        public @Nullable IntSet takeDirtyBlocks() {
+            IntSet dirty = this.allDirty ? null : new IntOpenHashSet(this.dirtyBlocks);
             this.meshDirty = false;
+            this.allDirty = false;
             this.dirtyBlocks.clear();
+            return dirty;
         }
 
         /** Returns and resets the block-entity dirty flag. */
@@ -148,6 +160,7 @@ public final class BotiClientCache {
             view.snapshot = snapshot;
             view.clearCountdown = -1;
             view.blockEntitiesDirty = true;
+            view.allDirty = true;
             view.dirtyBlocks.clear();
             view.touch();
         }
@@ -213,6 +226,7 @@ public final class BotiClientCache {
             } else if (view.clearCountdown == 0 && !SeamlessTransition.holds(entry.getKey())) {
                 it.remove();
                 BotiMeshCache.release(view);
+                BotiLightmaps.release(view);
                 BotiBlockEntities.release(view);
                 BotiEntities.release(entry.getKey());
             }
@@ -222,6 +236,7 @@ public final class BotiClientCache {
     /** Drops everything (disconnect). */
     static void clearAll() {
         VIEWS.values().forEach(BotiMeshCache::release);
+        VIEWS.values().forEach(BotiLightmaps::release);
         VIEWS.values().forEach(BotiBlockEntities::release);
         BotiEntities.clearAll();
         VIEWS.clear();

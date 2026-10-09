@@ -121,6 +121,11 @@ public final class SnapshotCapture {
                 level.getDefaultClockTime(),
                 hasSky,
                 biomeId,
+                new PortalEnvironment.Light(
+                        attributes.getValue(EnvironmentAttributes.SKY_LIGHT_FACTOR, pos, null),
+                        rgb(attributes.getValue(EnvironmentAttributes.SKY_LIGHT_COLOR, pos, null)),
+                        rgb(attributes.getValue(EnvironmentAttributes.AMBIENT_LIGHT_COLOR, pos, null)),
+                        rgb(attributes.getValue(EnvironmentAttributes.BLOCK_LIGHT_TINT, pos, null))),
                 sky);
     }
 

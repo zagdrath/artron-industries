@@ -38,7 +38,8 @@ public final class BotiDebugEntry implements DebugScreenEntry {
             views++;
             bytes += entry.getValue().bytes();
         }
-        displayer.addLine(String.format("BOTI: %d views (%.1f KB), rebuild %.2f ms, draw %.3f ms / %d doorways%s", views, bytes / 1024.0,
-                BotiMeshCache.lastRebuildMs(), BotiRenderer.lastDrawMs(), BotiRenderer.lastDrawCount(), BotiRenderer.usesFallback() ? " (fallback)" : ""));
+        displayer.addLine(String.format("BOTI: %d views (%.1f KB), rebuild %.2f ms / %d sections, draw %.3f ms / %d doorways, %d sections%s",
+                views, bytes / 1024.0, BotiMeshCache.lastRebuildMs(), BotiMeshCache.lastRebuildSections(), BotiRenderer.lastDrawMs(),
+                BotiRenderer.lastDrawCount(), BotiRenderer.lastSectionCount(), BotiRenderer.usesFallback() ? " (fallback)" : ""));
     }
 }

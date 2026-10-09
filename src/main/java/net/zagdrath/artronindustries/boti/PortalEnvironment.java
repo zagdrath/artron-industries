@@ -12,8 +12,8 @@ import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 
 /**
- * Far-side atmosphere sampled by the server at the far doorway, used for the backdrop behind the snapshot. Refreshed
- * every {@code boti.headerRefreshInterval} ticks.
+ * Far-side atmosphere sampled by the server at the far doorway, used for the backdrop, sky and lighting of the snapshot.
+ * Refreshed every {@code boti.headerRefreshInterval} ticks.
  *
  * @param skyColor RGB sky colour (already includes time of day and weather)
  * @param fogColor RGB fog colour
@@ -23,11 +23,41 @@ import net.minecraft.network.codec.StreamCodec;
  * @param dayTime  far-side default clock ticks
  * @param hasSky   whether the far side has a sky (false for TARDIS interiors)
  * @param biomeId  network id of the biome at the far doorway
+ * @param light    how the far side's lightmap turns light levels into colour there
  * @param sky      what is drawn in that sky, or {@code null} for no sky (or no overworld-like skybox)
  */
 public record PortalEnvironment(int skyColor, int fogColor, float fogEnd, float rain, float thunder, long dayTime, boolean hasSky, int biomeId,
-                                @Nullable Sky sky) {
-    public static final PortalEnvironment DARK = new PortalEnvironment(0x050508, 0x050508, 64.0F, 0.0F, 0.0F, 0L, false, -1, null);
+                                Light light, @Nullable Sky sky) {
+    public static final PortalEnvironment DARK = new PortalEnvironment(0x050508, 0x050508, 64.0F, 0.0F, 0.0F, 0L, false, -1, Light.DEFAULT, null);
+
+    /**
+     * The far side's lightmap inputs, as its own environment attributes give them at the doorway (the viewer's own
+     * settings and effects, such as gamma and night vision, are added on the client).
+     *
+     * @param skyFactor    sky light strength 0..1 (time of day, weather)
+     * @param skyColor     RGB colour of sky light
+     * @param ambientColor RGB colour of unlit areas
+     * @param blockTint    RGB tint of dim block light
+     */
+    public record Light(float skyFactor, int skyColor, int ambientColor, int blockTint) {
+        /** Vanilla's defaults for these attributes. */
+        public static final Light DEFAULT = new Light(1.0F, 0xFFFFFF, 0x000000, 0xFFD88C);
+
+        static final StreamCodec<ByteBuf, Light> STREAM_CODEC = new StreamCodec<>() {
+            @Override
+            public Light decode(ByteBuf buf) {
+                return new Light(buf.readFloat(), buf.readUnsignedMedium(), buf.readUnsignedMedium(), buf.readUnsignedMedium());
+            }
+
+            @Override
+            public void encode(ByteBuf buf, Light light) {
+                buf.writeFloat(light.skyFactor);
+                buf.writeMedium(light.skyColor);
+                buf.writeMedium(light.ambientColor);
+                buf.writeMedium(light.blockTint);
+            }
+        };
+    }
 
     /**
      * The sky's moving parts, as the far side's own environment attributes give them at the doorway.
@@ -70,7 +100,7 @@ public record PortalEnvironment(int skyColor, int fogColor, float fogEnd, float 
         @Override
         public PortalEnvironment decode(ByteBuf buf) {
             return new PortalEnvironment(buf.readInt(), buf.readInt(), buf.readFloat(), buf.readFloat(), buf.readFloat(),
-                    ByteBufCodecs.VAR_LONG.decode(buf), buf.readBoolean(), ByteBufCodecs.VAR_INT.decode(buf),
+                    ByteBufCodecs.VAR_LONG.decode(buf), buf.readBoolean(), ByteBufCodecs.VAR_INT.decode(buf), Light.STREAM_CODEC.decode(buf),
                     buf.readBoolean() ? Sky.STREAM_CODEC.decode(buf) : null);
         }
 
@@ -84,6 +114,7 @@ public record PortalEnvironment(int skyColor, int fogColor, float fogEnd, float 
             ByteBufCodecs.VAR_LONG.encode(buf, env.dayTime);
             buf.writeBoolean(env.hasSky);
             ByteBufCodecs.VAR_INT.encode(buf, env.biomeId);
+            Light.STREAM_CODEC.encode(buf, env.light);
             buf.writeBoolean(env.sky != null);
             if (env.sky != null) {
                 Sky.STREAM_CODEC.encode(buf, env.sky);

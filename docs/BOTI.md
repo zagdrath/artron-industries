@@ -59,7 +59,8 @@ backdrop. A view:
   `boti.blockDeltaInterval` ticks, and a full sweep every `boti.lightDeltaInterval` ticks also catches light, block entity
   data and changes made without neighbour updates (more than a quarter of the box changed → full snapshot instead);
 * refreshes the far-side atmosphere (`PortalEnvironment`: sky/fog colour sampled from environment attributes at the far
-  doorway, rain, thunder, time, biome) every `boti.headerRefreshInterval` ticks;
+  doorway, rain, thunder, time, biome, and the lightmap inputs: sky light factor and colour, ambient colour, block light
+  tint) every `boti.headerRefreshInterval` ticks;
 * sends the entities inside the box every `boti.entityUpdateInterval` ticks (vanilla `SynchedEntityData` values when an
   entity is new to the view and once a second);
 * is dropped (clear sent to every watcher) when the door closes, the TARDIS is deleted or a door moves; a player is
@@ -85,12 +86,19 @@ data or door ids.
 ## Client side
 
 **Meshing.** `SnapshotBlockGetter` implements vanilla's `BlockAndTintGetter` over an immutable copy of the snapshot:
-states, light from the packed data (via `getBrightness`), biome tint blended over 3×3 columns, air outside the box. The
-vanilla `ModelBlockRenderer` and `FluidRenderer` tessellate it off the render thread into one mesh per
-`ChunkSectionLayer` (26.3 has `SOLID`, `CUTOUT`, `TRANSLUCENT`; cutout-mipped no longer exists), so ambient occlusion,
-tint, fluids and model quirks match real terrain. Meshes are only rebuilt when the view changes, at most
-`boti.maxRebuildsPerFrame` start per frame, and uploads happen on the render thread. Translucent quads are re-sorted when the
-camera (mapped into far-side space) moves half a block.
+states, the far side's own light levels from the packed data (via `getBrightness`), biome tint blended over 3×3 columns,
+air outside the box. The box is split into 16³ sections (`SnapshotSections`, box-local, the last one on each axis cut
+short), and the vanilla `ModelBlockRenderer` and `FluidRenderer` tessellate them off the render thread into one mesh per
+section and `ChunkSectionLayer` (26.3 has `SOLID`, `CUTOUT`, `TRANSLUCENT`; cutout-mipped no longer exists), so ambient
+occlusion, tint, fluids and model quirks match real terrain. A new snapshot rebuilds every section; a delta only the
+sections around the blocks it changed (a block on a section border also dirties its neighbours, since culling, AO and
+fluid heights look one block around). Rebuilds start only when the view changes, at most `boti.maxRebuildsPerFrame` per
+frame, and uploads happen on the render thread.
+
+Each frame, a doorway draws only the sections in front of the far doorway plane, inside the view frustum and inside the
+pyramid from the camera through the open part of the opening (doorway pairs only turn in quarter turns, so section bounds
+stay axis-aligned on the near side): opaque layers nearest first, translucent farthest first. Each visible section's
+translucent quads are re-sorted when the camera (mapped into far-side space) has moved half a block since its last sort.
 
 **Render path: stencil, at `RenderLevelStageEvent.AfterOpaqueFeatures`.** 26.3's renderer (Mojang's "renderpearl" API with
 OpenGL and Vulkan backends) exposes stencil through NeoForge: `ConfigureMainRenderTargetEvent#enableStencil` adds a
@@ -121,16 +129,26 @@ uploads to happen before passes open, so the work is split:
       translucents behind/in front of the doorway sort correctly.
    No doorway is ever rendered inside a doorway (recursion depth 1).
 
-Looking out of a TARDIS, the interior dimension's lightmap has no sky light, so the far side's sky light is folded into
-block light scaled by its daylight (rebuilds only when that changes by 1/16), and terrain fades into the far side's fog
-colour towards the edge of the box.
+**Lighting.** Every view has its own vanilla `Lightmap` (`BotiLightmaps`), lit like the far side: sky light strength and
+colour, ambient colour and block light tint come from the far side's `PortalEnvironment.Light`, everything that belongs to
+the viewer (gamma, night vision, darkness, block light flicker, boss fog) from the viewer's own lightmap. It is redrawn
+when the viewer's is (once a tick) or the far side's light changes, and the block mesh samples it, so night falls through a
+doorway with no rebuild, moonlight is tinted like vanilla's and a far side without sky light (or with a dim ambient, like
+the Nether) looks as it does there. Block entities and entities seen through a doorway are drawn by vanilla's feature
+renderers, which bind the main lightmap themselves; looking out of a TARDIS (whose dimension has no sky light) their sky
+light is still folded into block light, scaled by the far side's daylight. Looking out, terrain fades into the far side's
+fog colour towards the edge of the box.
 
 **Seamless walk-through** (`SeamlessTransition`). The server announces a crossing (`BotiCrossingPayload`) just before
 moving the player. For that transition only, NeoForge's `RegisterDimensionTransitionScreenEvent` supplies a loading screen
 that draws nothing; the cached view of the far side is drawn unmasked in its real position ("arrival cover") until the
 real chunks are compiled; and the player is released as soon as its chunk is present instead of when its section has
-compiled (one access transformer: `ClientPacketListener#notifyPlayerLoaded`). While the camera is in a doorway plane or
-just through it before the server's teleport arrives, the far side is drawn full-screen. The server's copy of a player
+compiled (one access transformer: `ClientPacketListener#notifyPlayerLoaded`). The client decides the moment
+the eye crosses (`DoorwayEye`): every frame, the eye's path since the last frame is tested against the open part of the
+opening, and the far side fills the screen from the frame it crosses until the teleport arrives (or for a second, if the
+server refuses the crossing), however far the eye gets before then. It also fills the screen while the eye is within the
+near-plane distance in front of the plane, where the doorway quad would be cut. Walking out backwards, the far side drawn
+full-screen gets the police box stand-in, so looking back shows the box you are leaving. The server's copy of a player
 lags the client by a tick or two, so players are teleported with yaw, pitch and velocity relative to the client's own
 (`Relative.ROTATION` + `Relative.DELTA`, the turn being the doorway pair's rotation): speed, sprint and look direction
 carry over exactly. A `BotiArrivalPayload` follows the teleport; the client then moves the new player on by the lead its
@@ -273,11 +291,11 @@ features, so the model's door frame occludes the doorway correctly.
 
 | What | How |
 | --- | --- |
-| Transform, cell layout, snapshot encoding, schematic reading, doorway geometry | `./gradlew test` (JUnit; 111 tests, incl. all 16 facing pairs and the parlour schematic) |
+| Transform, cell layout, snapshot encoding, schematic reading, doorway geometry | `./gradlew test` (JUnit; 119 tests, incl. all 16 facing pairs, the parlour schematic and the section grid) |
 | Allocation / linking / deletion | `./gradlew runGameTestServer` (the GameTest server never creates datapack dimensions, so interior checks live in the smoke test) |
 | Dedicated server end to end | `./gradlew runServer -Partronindustries.smokeTest=true`: interior generation, door sync, snapshot capture, block deltas, item walk-through, close/delete while streaming, the Victorian Parlour (template placement, doorway leaves and collision, exits put in front of the police box). `-Partronindustries.smokeTest=keepopen` leaves a TARDIS open; the next normal run checks it survived the restart. |
 | Rendering and walk-through on a real client | `./gradlew runClient -Partronindustries.clientSmokeTest=true` with a world named `botitest` in `run/client/saves`: scripted camera poses, screenshots in `run/client/screenshots/boti_*.png` (doorway from several angles, matched-viewpoint comparison with the real interior, block entities, inside → outside at noon/dusk/night with mobs, sprinting in and walking out frame by frame, F3 line), then quits. |
-| Live stats | F3 line "BOTI: N views (KB), rebuild ms, draw ms / doorways"; `/artronclient boti stats`; `/artronclient boti debug here|off` floats the cached mesh in front of you. |
+| Live stats | F3 line "BOTI: N views (KB), rebuild ms / sections, draw ms / doorways, sections"; `/artronclient boti stats`; `/artronclient boti debug here|off` floats the cached mesh in front of you. |
 
 Measured on an RTX 5070 / i9-12900K (OpenGL): interior snapshot capture 9–14 ms (once per subscribe), exterior 9 ms after
 async chunk load; deltas 0.03–0.6 ms; full sweeps 1–3 ms per view every 10 ticks; mesh rebuild 2–24 ms off-thread; BOTI

@@ -31,6 +31,7 @@ import com.mojang.renderpearl.api.commands.RenderPass;
 import com.mojang.renderpearl.api.pipeline.PrimitiveTopology;
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.renderpearl.api.textures.FilterMode;
+import com.mojang.renderpearl.api.textures.GpuTextureView;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -42,6 +43,7 @@ import net.minecraft.client.renderer.blockentity.state.BlockEntityRenderState;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.chunk.ChunkSectionLayer;
+import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
 import net.minecraft.client.renderer.fog.FogRenderer;
 import net.minecraft.client.renderer.state.level.LevelRenderState;
@@ -54,6 +56,7 @@ import net.minecraft.util.context.ContextKey;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.client.event.ExtractLevelRenderStateEvent;
@@ -66,6 +69,7 @@ import net.zagdrath.artronindustries.boti.PortalGeometry;
 import net.zagdrath.artronindustries.boti.PortalSnapshot;
 import net.zagdrath.artronindustries.boti.PortalViewKey;
 import net.zagdrath.artronindustries.boti.SnapshotBox;
+import net.zagdrath.artronindustries.boti.SnapshotSections;
 import net.zagdrath.artronindustries.client.ArtronClientConfig;
 import net.zagdrath.artronindustries.portal.DoorPairTransform;
 import net.zagdrath.artronindustries.portal.OpenSpan;
@@ -92,14 +96,11 @@ public final class BotiRenderer {
     private static final ContextKey<List<DoorDraw>> DRAWS = new ContextKey<>(Identifier.fromNamespaceAndPath(ArtronIndustries.MODID, "boti_draws"));
     private static final ChunkSectionLayer[] LAYERS = {ChunkSectionLayer.SOLID, ChunkSectionLayer.CUTOUT, ChunkSectionLayer.TRANSLUCENT};
     private static final int QUADS_PER_DOOR = 3;
-    /** Camera distances (blocks) in front of / behind a doorway plane within which the far side fills the screen. */
-    private static final double FULLSCREEN_IN_FRONT = 0.06;
-    private static final double FULLSCREEN_BEHIND = 1.5;
 
-    /** Everything needed to draw one doorway this frame. */
     /** A clip plane everything is in front of. */
     static final Vector3f NO_CLIP = new Vector3f(0.0F, 0.0F, 1.0F);
 
+    /** Everything needed to draw one doorway this frame. */
     static final class DoorDraw {
         final PortalViewKey key;
         final BotiClientCache.@Nullable View view;
@@ -118,8 +119,18 @@ public final class BotiRenderer {
         int backdropBottom;
         /** The outside's sky drawn in this doorway this frame (see BotiSky), or null. */
         BotiSky.@Nullable Frame sky;
+        /** Sky light folded into block light for block entities and entities (see BotiRenderer#skyToBlock), -1 = none. */
         float skyToBlock = -1.0F;
         @Nullable BotiMesh mesh;
+        /** The far side's lightmap the block mesh is drawn with (see BotiLightmaps). */
+        @Nullable GpuTextureView lightmap;
+        /** This frame's view frustum, shared by every door; sections outside it are not drawn. */
+        @Nullable Frustum frustum;
+        @Nullable Vec3 nearCamera;
+        /** Whether only what is seen through the doorway opening is drawn (false: full screen, arrival cover, debug). */
+        boolean throughOpening;
+        /** Mesh sections to draw, nearest first. */
+        int[] sections = new int[0];
         /** Fog uniform for everything drawn inside this doorway (fades the far side into its own fog colour). */
         @Nullable GpuBuffer fog;
         int firstQuad;
@@ -155,6 +166,7 @@ public final class BotiRenderer {
     private static final java.util.Set<Object> LOGGED_TYPES = new java.util.HashSet<>();
     private static double lastDrawMs;
     private static int lastDrawCount;
+    private static int lastSectionCount;
 
     private BotiRenderer() {}
 
@@ -190,7 +202,9 @@ public final class BotiRenderer {
         float partialTick = event.getDeltaTracker().getGameTimeDeltaPartialTick(false);
         boolean fallback = usesFallback();
         double maxDistance = ArtronClientConfig.RENDER_DISTANCE.getAsInt();
+        Frustum frustum = new Frustum(event.getFrustum());
         List<DoorDraw> draws = new ArrayList<>();
+        DoorwayEye.beginFrame(level.dimension(), camera);
 
         for (PortalEndpoint endpoint : PortalEndpoints.in(level)) {
             if (endpoint.getTardisId() == null) {
@@ -207,18 +221,18 @@ public final class BotiRenderer {
             BlockPos pos = endpoint.getPortalPos();
             Direction facing = endpoint.getFacing();
             double cameraDistance = shape.signedDistance(pos, facing, camera);
-            // Camera in the doorway plane (the doorway quad would be cut by the near plane) or just through it while the
-            // server has not moved the player yet: the whole screen shows the far side.
-            boolean fullscreen = cameraDistance < FULLSCREEN_IN_FRONT && cameraDistance > -FULLSCREEN_BEHIND
-                    && shape.containsProjected(pos, facing, camera, -0.05, span) && !endpoint.getPassableSpan().isEmpty();
+            PortalViewKey key = new PortalViewKey(endpoint.getTardisId(), endpoint.getPortalSide());
+            // Camera in the doorway plane (the doorway quad would be cut by the near plane) or through it while the server
+            // has not moved the player yet: the whole screen shows the far side.
+            boolean fullscreen = DoorwayEye.fillsScreen(key, shape, pos, facing, span, !endpoint.getPassableSpan().isEmpty());
             if (cameraDistance <= 0.0 && !fullscreen) {
                 continue; // looking at the back of the doorway
             }
             double distanceSqr = shape.center(pos, facing).distanceToSqr(camera);
-            if (distanceSqr > maxDistance * maxDistance || !event.getFrustum().isVisible(shape.bounds(pos, facing, 0.05))) {
+            // Through the doorway, the far side fills the screen even though the doorway itself is now behind the camera.
+            if (distanceSqr > maxDistance * maxDistance || (!fullscreen && !event.getFrustum().isVisible(shape.bounds(pos, facing, 0.05)))) {
                 continue;
             }
-            PortalViewKey key = new PortalViewKey(endpoint.getTardisId(), endpoint.getPortalSide());
             BotiClientCache.View view = BotiClientCache.get(key);
             if (view != null && !view.snapshot().geometry().nearPos().equals(pos)) {
                 view = null; // stale view for a door that moved; show the backdrop until the new snapshot arrives
@@ -233,6 +247,9 @@ public final class BotiRenderer {
             }
             DoorDraw draw = new DoorDraw(key, view, corners, distanceSqr, fallback, false);
             draw.endpoint = endpoint;
+            draw.frustum = frustum;
+            draw.nearCamera = camera;
+            draw.throughOpening = !fullscreen;
             if (!fallback) {
                 computeView(draw, level, camera);
             }
@@ -247,6 +264,8 @@ public final class BotiRenderer {
             Vec3 origin = Vec3.atLowerCornerOf(arrivalView.snapshot().box().origin());
             DoorDraw draw = new DoorDraw(arrival, arrivalView, new Vector3f[0], 0.0, false, true);
             draw.arrival = true;
+            draw.frustum = frustum;
+            draw.nearCamera = camera;
             draw.model = new Matrix4f().translation((float) (origin.x - camera.x), (float) (origin.y - camera.y), (float) (origin.z - camera.z));
             draw.boxLocalCamera = camera.subtract(origin).toVector3f();
             draw.farCamera = camera;
@@ -345,9 +364,10 @@ public final class BotiRenderer {
     }
 
     /**
-     * Sky-light folding factor: when the viewer's dimension has no sky light but the far side does, sky light is baked
-     * into block light scaled by the far side's daylight, quantised to 1/16 so it only causes a rebuild when visibly
-     * different. -1 = no folding.
+     * Sky-light folding factor for block entities and entities seen through a doorway, which vanilla draws with the
+     * viewer's lightmap (the block mesh has the far side's own, see BotiLightmaps): when the viewer's dimension has no sky
+     * light but the far side does, their sky light is added to block light scaled by the far side's daylight. -1 = no
+     * folding.
      */
     private static float skyToBlock(ClientLevel level, PortalEnvironment env) {
         if (level.dimensionType().hasSkyLight() || !env.hasSky()) {
@@ -381,10 +401,15 @@ public final class BotiRenderer {
         int sequentialIndices = 0;
         for (DoorDraw draw : draws) {
             if (draw.view != null && draw.boxLocalCamera != null) {
-                draw.mesh = BotiMeshCache.prepare(draw.view, draw.skyToBlock, draw.boxLocalCamera);
+                draw.mesh = BotiMeshCache.prepare(draw.view, draw.boxLocalCamera);
                 if (!draw.warmOnly) {
                     draw.fog = fogBuffer(draw);
                     FOG_BUFFERS.add(draw.fog);
+                    draw.lightmap = BotiLightmaps.prepare(draw.view);
+                    if (draw.mesh != null) {
+                        draw.sections = visibleSections(draw, draw.mesh);
+                        draw.mesh.resortIfNeeded(draw.boxLocalCamera, draw.sections);
+                    }
                 }
                 if (draw.mesh != null) {
                     sequentialIndices = Math.max(sequentialIndices, draw.mesh.maxSequentialIndices());
@@ -462,6 +487,110 @@ public final class BotiRenderer {
         }
     }
 
+    /**
+     * The mesh sections to draw, nearest first: those in front of the far doorway plane, in the view frustum and, seen
+     * through a doorway, inside the pyramid from the camera through the open part of the opening. Doorway pairs only turn
+     * in quarter turns, so a section's bounds stay axis-aligned on the near side.
+     */
+    private static int[] visibleSections(DoorDraw draw, BotiMesh mesh) {
+        SnapshotSections grid = mesh.grid();
+        Vector3f[] edges = draw.throughOpening ? openingPlanes(draw.corners) : null;
+        Vector3f[] points = new Vector3f[8];
+        for (int i = 0; i < points.length; i++) {
+            points[i] = new Vector3f();
+        }
+        List<Integer> visible = new ArrayList<>();
+        float[] distance = new float[grid.count()];
+        for (int section = 0; section < grid.count(); section++) {
+            if (mesh.section(section) == null) {
+                continue;
+            }
+            float x0 = grid.minX(section);
+            float y0 = grid.minY(section);
+            float z0 = grid.minZ(section);
+            float x1 = grid.maxX(section);
+            float y1 = grid.maxY(section);
+            float z1 = grid.maxZ(section);
+            // Wholly behind the far doorway plane (box-local; see SnapshotBox#clipPlane).
+            Vector3f clip = draw.clip;
+            if (Math.max(clip.x * x0, clip.x * x1) + Math.max(clip.y * z0, clip.y * z1) + clip.z < 0.0F) {
+                continue;
+            }
+            if (draw.model != null && (draw.frustum != null || edges != null)) {
+                float minX = Float.POSITIVE_INFINITY;
+                float minY = Float.POSITIVE_INFINITY;
+                float minZ = Float.POSITIVE_INFINITY;
+                float maxX = Float.NEGATIVE_INFINITY;
+                float maxY = Float.NEGATIVE_INFINITY;
+                float maxZ = Float.NEGATIVE_INFINITY;
+                for (int i = 0; i < 8; i++) {
+                    Vector3f p = draw.model.transformPosition((i & 1) == 0 ? x0 : x1, (i & 2) == 0 ? y0 : y1, (i & 4) == 0 ? z0 : z1, points[i]);
+                    minX = Math.min(minX, p.x);
+                    minY = Math.min(minY, p.y);
+                    minZ = Math.min(minZ, p.z);
+                    maxX = Math.max(maxX, p.x);
+                    maxY = Math.max(maxY, p.y);
+                    maxZ = Math.max(maxZ, p.z);
+                }
+                if (draw.frustum != null && draw.nearCamera != null) {
+                    Vec3 c = draw.nearCamera;
+                    if (!draw.frustum.isVisible(new AABB(minX + c.x, minY + c.y, minZ + c.z, maxX + c.x, maxY + c.y, maxZ + c.z))) {
+                        continue;
+                    }
+                }
+                if (edges != null && outsideAny(edges, points)) {
+                    continue;
+                }
+            }
+            if (draw.boxLocalCamera != null) {
+                float dx = (x0 + x1) * 0.5F - draw.boxLocalCamera.x;
+                float dy = (y0 + y1) * 0.5F - draw.boxLocalCamera.y;
+                float dz = (z0 + z1) * 0.5F - draw.boxLocalCamera.z;
+                distance[section] = dx * dx + dy * dy + dz * dz;
+            }
+            visible.add(section);
+        }
+        visible.sort(Comparator.comparingDouble(i -> distance[i]));
+        return visible.stream().mapToInt(Integer::intValue).toArray();
+    }
+
+    /**
+     * The four planes through the camera (the origin of camera-relative space) and the edges of the doorway quad, as
+     * normals pointing into the pyramid they bound.
+     */
+    private static Vector3f[] openingPlanes(Vector3f[] corners) {
+        Vector3f middle = new Vector3f();
+        for (Vector3f c : corners) {
+            middle.add(c);
+        }
+        Vector3f[] planes = new Vector3f[4];
+        for (int i = 0; i < 4; i++) {
+            Vector3f n = new Vector3f(corners[i]).cross(corners[(i + 1) % 4]);
+            if (n.dot(middle) < 0.0F) {
+                n.negate();
+            }
+            planes[i] = n;
+        }
+        return planes;
+    }
+
+    /** Whether all {@code points} lie outside one of the {@code planes} (through the origin). */
+    private static boolean outsideAny(Vector3f[] planes, Vector3f[] points) {
+        for (Vector3f n : planes) {
+            boolean outside = true;
+            for (Vector3f p : points) {
+                if (n.dot(p) >= -1.0E-3F) {
+                    outside = false;
+                    break;
+                }
+            }
+            if (outside) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static void quad(BufferBuilder builder, Vector3f[] c, int bottomColor, int topColor) {
         builder.addVertex(c[0].x, c[0].y, c[0].z).setColor(bottomColor);
         builder.addVertex(c[1].x, c[1].y, c[1].z).setColor(bottomColor);
@@ -488,9 +617,10 @@ public final class BotiRenderer {
                 continue;
             }
             blockEntities = ArtronClientConfig.RENDER_BLOCK_ENTITIES.getAsBoolean() ? BotiBlockEntities.get(draw.view, mc.level) : List.of();
-            if (draw.arrival) {
+            if (draw.arrival || (!draw.throughOpening && !draw.debugFloating)) {
                 // Out of a TARDIS, the snapshot holds what is in front of its doorway but not the police box itself, which
-                // stands behind it; until the box's own chunk is here, a stand-in is drawn so looking back shows it.
+                // stands behind it. Through the doorway (the far side filling the screen until the teleport) and until the
+                // box's own chunk is here after it, a stand-in is drawn so looking back shows it.
                 BlockEntity box = BotiBlockEntities.arrivalExterior(draw.view, mc.level);
                 if (box != null) {
                     List<BlockEntity> withBox = new ArrayList<>(blockEntities);
@@ -615,11 +745,13 @@ public final class BotiRenderer {
         GpuBuffer sequential = indices.getBuffer();
 
         int drawn = 0;
+        int sections = 0;
         for (DoorDraw draw : draws) {
             if (draw.hidden) {
                 continue;
             }
             drawn++;
+            sections += draw.sections.length;
             pass.pushDebugGroup(() -> "BOTI " + draw.key);
             if (draw.debugFloating) {
                 drawMesh(pass, draw, view, sequential, indices.type(), mc, true);
@@ -671,6 +803,7 @@ public final class BotiRenderer {
             pass.popDebugGroup();
         }
         lastDrawCount = drawn;
+        lastSectionCount = sections;
         lastDrawMs = (System.nanoTime() - start) / 1.0E6;
     }
 
@@ -693,26 +826,36 @@ public final class BotiRenderer {
         GpuBufferSlice transforms = RenderSystem.getDynamicUniforms().writeTransform(new Matrix4f(view), new Vector4f(1.0F), new Vector3f(draw.clip), draw.model);
         pass.setUniform("Sampler0", mc.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS).getTextureView(),
                 RenderSystem.getSamplerCache().getClampToEdge(FilterMode.NEAREST, true));
-        pass.setUniform("Sampler2", mc.gameRenderer.lightmap(), RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
+        pass.setUniform("Sampler2", draw.lightmap != null ? draw.lightmap : mc.gameRenderer.lightmap(),
+                RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR));
+        int[] sections = draw.sections;
         for (ChunkSectionLayer layer : LAYERS) {
-            BotiMesh.Layer data = mesh.layer(layer);
-            if (data == null || data.indexCount() == 0) {
-                continue;
-            }
             RenderPipeline pipeline = switch (layer) {
                 case SOLID -> debug ? BotiPipelines.DEBUG_BLOCK_SOLID : BotiPipelines.BLOCK_SOLID;
                 case CUTOUT -> debug ? BotiPipelines.DEBUG_BLOCK_CUTOUT : BotiPipelines.BLOCK_CUTOUT;
                 case TRANSLUCENT -> debug ? BotiPipelines.DEBUG_BLOCK_TRANSLUCENT : BotiPipelines.BLOCK_TRANSLUCENT;
             };
-            pass.setPipeline(RenderSystem.getCompiledPipeline(pipeline));
-            pass.setUniform("DynamicTransforms", transforms);
-            pass.setVertexBuffer(0, data.vertices().slice());
-            if (data.sortedIndices() != null) {
-                pass.setIndexBuffer(data.sortedIndices(), data.sortedIndexType());
-            } else {
-                pass.setIndexBuffer(sequential, sequentialType);
+            boolean pipelineSet = false;
+            // Opaque layers nearest first (so depth testing rejects what is hidden), translucent farthest first.
+            for (int k = 0; k < sections.length; k++) {
+                BotiMesh.Section section = mesh.section(sections[layer.translucent() ? sections.length - 1 - k : k]);
+                BotiMesh.Layer data = section == null ? null : section.layer(layer);
+                if (data == null || data.indexCount() == 0) {
+                    continue;
+                }
+                if (!pipelineSet) {
+                    pass.setPipeline(RenderSystem.getCompiledPipeline(pipeline));
+                    pass.setUniform("DynamicTransforms", transforms);
+                    pipelineSet = true;
+                }
+                pass.setVertexBuffer(0, data.vertices().slice());
+                if (data.sortedIndices() != null) {
+                    pass.setIndexBuffer(data.sortedIndices(), data.sortedIndexType());
+                } else {
+                    pass.setIndexBuffer(sequential, sequentialType);
+                }
+                pass.drawIndexed(data.indexCount(), 1, 0, 0, 0);
             }
-            pass.drawIndexed(data.indexCount(), 1, 0, 0, 0);
         }
     }
 
@@ -734,5 +877,10 @@ public final class BotiRenderer {
 
     public static int lastDrawCount() {
         return lastDrawCount;
+    }
+
+    /** Mesh sections drawn last frame, over every doorway. */
+    public static int lastSectionCount() {
+        return lastSectionCount;
     }
 }

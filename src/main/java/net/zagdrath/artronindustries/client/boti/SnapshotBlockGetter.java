@@ -26,8 +26,9 @@ import net.zagdrath.artronindustries.boti.SnapshotBox;
 
 /**
  * Read-only view of a snapshot for the vanilla block and fluid renderers. Coordinates are far-side world coordinates;
- * anything outside the box is air with no light. Immutable (it owns copies of the snapshot arrays), so it is safe to
- * mesh from off the render thread.
+ * anything outside the box is air with no light. Light levels are the far side's own; the view's lightmap
+ * ({@link BotiLightmaps}) turns them into colour like the far side's does. Immutable (it owns copies of the snapshot
+ * arrays), so it is safe to mesh from off the render thread.
  */
 public final class SnapshotBlockGetter implements BlockAndTintGetter {
     private static final BlockState AIR = Blocks.AIR.defaultBlockState();
@@ -37,13 +38,8 @@ public final class SnapshotBlockGetter implements BlockAndTintGetter {
     private final byte[] light;
     private final Biome[] columnBiomes;
     private final @Nullable Biome fallbackBiome;
-    /**
-     * When the viewer's dimension has no sky light (looking out of a TARDIS), its lightmap cannot show sky light, so the
-     * far side's sky light is folded into block light, scaled by the far side's daylight (0..1). Negative = disabled.
-     */
-    private final float skyToBlock;
 
-    public SnapshotBlockGetter(PortalSnapshot snapshot, Registry<Biome> biomes, float skyToBlock) {
+    public SnapshotBlockGetter(PortalSnapshot snapshot, Registry<Biome> biomes) {
         this.box = snapshot.box();
         int[] ids = snapshot.states();
         this.states = new BlockState[ids.length];
@@ -62,7 +58,6 @@ public final class SnapshotBlockGetter implements BlockAndTintGetter {
             }
         }
         this.fallbackBiome = fallback;
-        this.skyToBlock = skyToBlock;
     }
 
     public static Registry<Biome> biomeRegistry(net.minecraft.world.level.Level level) {
@@ -103,12 +98,7 @@ public final class SnapshotBlockGetter implements BlockAndTintGetter {
             return 0;
         }
         byte packed = this.light[i];
-        int block = PortalSnapshot.blockLight(packed);
-        int sky = PortalSnapshot.skyLight(packed);
-        if (this.skyToBlock >= 0.0F) {
-            return layer == LightLayer.BLOCK ? Math.max(block, Math.round(sky * this.skyToBlock)) : 0;
-        }
-        return layer == LightLayer.BLOCK ? block : sky;
+        return layer == LightLayer.BLOCK ? PortalSnapshot.blockLight(packed) : PortalSnapshot.skyLight(packed);
     }
 
     @Override
