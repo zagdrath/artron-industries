@@ -199,13 +199,42 @@ block entity and in its `TardisRecord`:
   (`PortalShape`) and the outline and collision of the three blocks the box stands on; its model is drawn by the TARDIS
   block entity renderer (`HudolinExteriorRenderer`, the only one so far). The block entity's exterior wins: on load the
   record is brought in line with it.
-* `interior` — a `TardisInterior` from `TardisInteriors` (default `artronindustries:starter`, built by
-  `InteriorGenerator`). It gives the interior door's offset from the cell origin and facing, and generates the interior
-  the first time it is needed. The record's interior wins, since it may already be built.
+* `interior` — a `TardisInterior` from `TardisInteriors` (default `artronindustries:victorian_parlour`). It gives the
+  interior door's offset from the cell origin, its facing and its opening, and generates the interior the first time it
+  is needed. The record's interior wins, since it may already be built. `artronindustries:starter` (built in code by
+  `InteriorGenerator`) is the room the BOTI tests use; records from before interiors could be chosen load as it.
 
 Both are set from the item's `block_entity_data` when placed (or by `/artron tardis create [exterior] [interior]`).
 Unknown ids in saves load as the defaults. To add an exterior, subclass `TardisExterior` and register it in
 `TardisExteriors`; to add an interior, register a `TardisInterior` in `TardisInteriors`.
+
+### Interior templates
+
+Template interiors (`TemplateInterior`) are Sponge schematics (`.schem`, versions 2 and 3, as saved by WorldEdit and
+FAWE) in `data/<namespace>/tardis_interior/<name>.schem`, so a data pack can replace one. `SpongeSchematic` turns the
+file into vanilla structure template NBT and the game's own data fixer and structure placement take it from there, so
+schematics from older versions are upgraded like any structure. The schematic's lowest corner goes at the cell origin and
+it is placed as saved (no shape updates). Magenta wool on a corner of the bounding box is a selection marker and is left
+out.
+
+The door is part of the build: registering the interior names the box of blocks that make up the doors (corners in
+schematic coordinates), the way they face (into the room) and how far behind the front of the box the doorway plane is.
+After placement those blocks become `interior_doorway` cells (`InteriorDoorwayBlock`): invisible, colliding like the block
+they replaced while shut, not at all while open, and clickable to open and shut the doors. The master cell (front bottom
+left) holds an `InteriorDoorwayBlockEntity`, the interior door, which keeps the replaced blocks and draws them as two
+leaves (`InteriorDoorwayRenderer`): the left half, as seen from the room, is hinged on its left edge, the rest on its
+right edge, and both swing 90 degrees out into the room. The left leaf opens with the exterior's right leaf, since that
+is where the exterior's right half comes out. Block entity data of the replaced blocks is not kept.
+
+The two ends of a doorway need not be the same size: each side's opening is its own `PortalShape` (which can now sit off
+the block centre, `lateralOffset`, for even widths), glued at the bottom centre with no scaling. Looking out of the
+parlour's 4x4 door shows a 4x4 piece of the world at real scale; anything walking out of a wider or taller doorway than
+the far one is put back inside the far opening (`DoorwayCrossing.intoOpening`), so it steps out of the police box's doors.
+
+The Victorian Parlour's doors are the 4x4 gray leaves (and the button panelling in front) at x 12-15, y 2-5, z 38-39 of
+its schematic, facing north, with the plane on the front of the gray blocks.
+
+### Other doorway ends
 
 Anything else that should act as a doorway end works the same way as `TardisBlockEntity`:
 
@@ -233,9 +262,9 @@ features, so the model's door frame occludes the doorway correctly.
 
 | What | How |
 | --- | --- |
-| Transform, cell layout, snapshot encoding | `./gradlew test` (JUnit; 97 tests, incl. all 16 facing pairs) |
+| Transform, cell layout, snapshot encoding, schematic reading, doorway geometry | `./gradlew test` (JUnit; 111 tests, incl. all 16 facing pairs and the parlour schematic) |
 | Allocation / linking / deletion | `./gradlew runGameTestServer` (the GameTest server never creates datapack dimensions, so interior checks live in the smoke test) |
-| Dedicated server end to end | `./gradlew runServer -Partronindustries.smokeTest=true`: interior generation, door sync, snapshot capture, block deltas, item walk-through, close/delete while streaming. `-Partronindustries.smokeTest=keepopen` leaves a TARDIS open; the next normal run checks it survived the restart. |
+| Dedicated server end to end | `./gradlew runServer -Partronindustries.smokeTest=true`: interior generation, door sync, snapshot capture, block deltas, item walk-through, close/delete while streaming, the Victorian Parlour (template placement, doorway leaves and collision, exits put in front of the police box). `-Partronindustries.smokeTest=keepopen` leaves a TARDIS open; the next normal run checks it survived the restart. |
 | Rendering and walk-through on a real client | `./gradlew runClient -Partronindustries.clientSmokeTest=true` with a world named `botitest` in `run/client/saves`: scripted camera poses, screenshots in `run/client/screenshots/boti_*.png` (doorway from several angles, matched-viewpoint comparison with the real interior, block entities, inside → outside at noon/dusk/night with mobs, sprinting in and walking out frame by frame, F3 line), then quits. |
 | Live stats | F3 line "BOTI: N views (KB), rebuild ms, draw ms / doorways"; `/artronclient boti stats`; `/artronclient boti debug here|off` floats the cached mesh in front of you. |
 

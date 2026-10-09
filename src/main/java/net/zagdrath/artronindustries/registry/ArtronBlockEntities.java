@@ -13,6 +13,7 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.zagdrath.artronindustries.ArtronIndustries;
 import net.zagdrath.artronindustries.block.entity.InteriorDoorBlockEntity;
+import net.zagdrath.artronindustries.block.entity.InteriorDoorwayBlockEntity;
 import net.zagdrath.artronindustries.block.entity.TardisBlockEntity;
 
 public final class ArtronBlockEntities {
@@ -22,6 +23,8 @@ public final class ArtronBlockEntities {
             "tardis", () -> new BlockEntityType<>(TardisBlockEntity::new, ArtronBlocks.TARDIS.get()));
     public static final Supplier<BlockEntityType<InteriorDoorBlockEntity>> INTERIOR_DOOR = BLOCK_ENTITY_TYPES.register(
             "interior_door", () -> new BlockEntityType<>(InteriorDoorBlockEntity::new, ArtronBlocks.INTERIOR_DOOR.get()));
+    public static final Supplier<BlockEntityType<InteriorDoorwayBlockEntity>> INTERIOR_DOORWAY = BLOCK_ENTITY_TYPES.register(
+            "interior_doorway", () -> new BlockEntityType<>(InteriorDoorwayBlockEntity::new, ArtronBlocks.INTERIOR_DOORWAY.get()));
 
     static {
         // Was test_exterior_door; see ArtronBlocks.

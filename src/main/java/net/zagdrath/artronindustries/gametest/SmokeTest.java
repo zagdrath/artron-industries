@@ -41,6 +41,12 @@ import net.zagdrath.artronindustries.portal.PortalSide;
 import net.zagdrath.artronindustries.registry.ArtronBlocks;
 import net.zagdrath.artronindustries.tardis.TardisInteriorManager;
 import net.zagdrath.artronindustries.tardis.TardisRecord;
+import net.zagdrath.artronindustries.block.InteriorDoorwayBlock;
+import net.zagdrath.artronindustries.block.entity.InteriorDoorwayBlockEntity;
+import net.zagdrath.artronindustries.portal.PortalShape;
+import net.zagdrath.artronindustries.tardis.DoorState;
+import net.zagdrath.artronindustries.tardis.exterior.TardisExteriors;
+import net.zagdrath.artronindustries.tardis.interior.TardisInteriors;
 
 /**
  * Dedicated-server smoke test, enabled with {@code -Dartronindustries.smokeTest=true}
@@ -62,6 +68,7 @@ public final class SmokeTest {
     /** Leave the last TARDIS open (and the server stopped with it open) so the next run can check a restart. */
     private static boolean keepOpen;
     private @Nullable TardisRecord leftover;
+    private @Nullable TardisRecord parlour;
 
     private SmokeTest() {}
 
@@ -109,7 +116,8 @@ public final class SmokeTest {
             BlockPos ground = overworld.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, new BlockPos(8, 0, 8));
             overworld.setBlockAndUpdate(ground, Blocks.AIR.defaultBlockState());
             overworld.setBlockAndUpdate(ground.above(), Blocks.AIR.defaultBlockState());
-            this.record = ArtronBlocks.TARDIS.get().placeNewTardis(overworld, ground, Direction.SOUTH);
+            // The streaming checks below look for the starter room's console.
+            this.record = ArtronBlocks.TARDIS.get().placeNewTardis(overworld, ground, Direction.SOUTH, TardisExteriors.DEFAULT, TardisInteriors.STARTER);
             check(this.record != null, "could not place the exterior door at " + ground);
             overworld.getChunkSource().addTicketWithRadius(TicketType.PORTAL, ChunkPos.containing(ground), 1);
         });
@@ -180,6 +188,60 @@ public final class SmokeTest {
             check(PortalWatcher.pinView(server, this.record, PortalSide.EXTERIOR), "could not pin the view again");
             this.waitFor(() -> PortalWatcher.encodedView(this.key(PortalSide.EXTERIOR)) != null, 600);
         });
+        // The Victorian Parlour: placed from its schematic, its doorway made of the build's own blocks.
+        this.steps.add(server -> {
+            ServerLevel overworld = server.overworld();
+            BlockPos ground = overworld.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, new BlockPos(24, 0, 8));
+            for (int dy = 0; dy < 3; dy++) {
+                overworld.setBlockAndUpdate(ground.above(dy), Blocks.AIR.defaultBlockState());
+            }
+            this.parlour = ArtronBlocks.TARDIS.get().placeNewTardis(overworld, ground, Direction.SOUTH);
+            check(this.parlour != null && this.parlour.interior() == TardisInteriors.VICTORIAN_PARLOUR, "a new TARDIS did not get the parlour");
+            check(this.parlour.interiorGenerated(), "parlour not generated");
+            overworld.getChunkSource().addTicketWithRadius(TicketType.PORTAL, ChunkPos.containing(ground), 1);
+            ServerLevel interior = TardisInteriorManager.interiorLevel(server);
+            interior.getChunkSource().addTicketWithRadius(TicketType.PORTAL, ChunkPos.containing(this.parlour.interiorDoorPos()), 2);
+            BlockPos o = this.parlour.interiorOrigin();
+            check(interior.getBlockState(o.offset(13, 1, 37)).is(Blocks.SPRUCE_PLANKS), "parlour floor missing");
+            check(interior.getBlockState(o).isAir(), "corner marker was placed");
+            check(interior.getBlockEntity(this.parlour.interiorDoorPos()) instanceof InteriorDoorwayBlockEntity d
+                    && this.parlour.uuid().equals(d.getTardisId()) && d.leaves().size() == 32, "doorway not built or not linked");
+            InteriorDoorwayBlockEntity doorway = (InteriorDoorwayBlockEntity) interior.getBlockEntity(this.parlour.interiorDoorPos());
+            check(doorway.leaves().get(doorway.doorway().index(0, 0, 1)).is(Blocks.CONCRETE.pick(net.minecraft.world.item.DyeColor.GRAY)), "leaf blocks not kept");
+            BlockPos leaf = o.offset(12, 2, 39);
+            check(interior.getBlockState(leaf).is(ArtronBlocks.INTERIOR_DOORWAY.get())
+                    && !interior.getBlockState(leaf).getCollisionShape(interior, leaf).isEmpty(), "shut leaf does not collide");
+            TardisInteriorManager manager = TardisInteriorManager.get(server);
+            manager.setDoorState(server, this.parlour, DoorState.RIGHT_OPEN);
+            // The exterior's right leaf comes out of this door's left one: from the room (looking south), the east leaf.
+            check(interior.getBlockState(o.offset(15, 2, 39)).getValue(InteriorDoorwayBlock.OPEN)
+                    && !interior.getBlockState(leaf).getValue(InteriorDoorwayBlock.OPEN), "the wrong leaf opened first");
+            manager.setDoorState(server, this.parlour, DoorState.BOTH_OPEN);
+            check(interior.getBlockState(leaf).getCollisionShape(interior, leaf).isEmpty(), "open leaf still collides");
+            this.wait = PortalDoorBlockEntity.OPEN_TICKS + 2;
+        });
+        // Thrown out near the edge of the 4-wide doorway, an item comes out in front of the police box's doors, not beside them.
+        this.steps.add(server -> {
+            ServerLevel interior = TardisInteriorManager.interiorLevel(server);
+            Direction facing = this.parlour.interiorDoorFacing();
+            Vec3 anchor = this.parlour.interiorShape().anchor(this.parlour.interiorDoorPos(), facing);
+            Vec3 in = Vec3.atLowerCornerOf(facing.getUnitVec3i());
+            Vec3 from = anchor.add(in.scale(2.0)).add(Vec3.atLowerCornerOf(PortalShape.right(facing).getUnitVec3i()).scale(1.5)).add(0.0, 1.0, 0.0);
+            ItemEntity item = new ItemEntity(interior, from.x, from.y, from.z, new ItemStack(Items.EMERALD));
+            item.setDeltaMovement(in.scale(-0.45).add(0.0, 0.15, 0.0));
+            interior.addFreshEntity(item);
+            this.waitFor(() -> this.parlourEmerald(server) != null, 100);
+        });
+        this.steps.add(server -> {
+            ItemEntity item = this.parlourEmerald(server);
+            double lateral = this.parlour.exteriorShape().lateral(this.parlour.exteriorDoorPos(), this.parlour.exteriorFacing(), item.position());
+            check(Math.abs(lateral) <= this.parlour.exteriorShape().width() / 2.0, "came out beside the exterior doors, " + lateral + " off centre");
+            item.discard();
+            TardisInteriorManager.get(server).delete(server, this.parlour);
+            ServerLevel interior = TardisInteriorManager.interiorLevel(server);
+            check(!interior.getBlockState(this.parlour.interiorOrigin().offset(12, 2, 39)).getValue(InteriorDoorwayBlock.OPEN),
+                    "deleting the TARDIS left its doorway open");
+        });
         this.steps.add(server -> {
             if (keepOpen) {
                 ArtronIndustries.LOGGER.info("ARTRON SMOKE TEST leaving TARDIS #{} open for the restart check", this.record.id());
@@ -193,6 +255,11 @@ public final class SmokeTest {
             PortalDoorBlockEntity ex = (PortalDoorBlockEntity) server.overworld().getBlockEntity(this.record.exteriorDoorPos());
             check(ex != null && ex.getTardisId() == null, "exterior door still linked after deletion");
         });
+    }
+
+    private @Nullable ItemEntity parlourEmerald(MinecraftServer server) {
+        return server.overworld().getEntities((Entity) null, new AABB(this.parlour.exteriorDoorPos()).inflate(6),
+                e -> e instanceof ItemEntity i && i.getItem().is(Items.EMERALD)).stream().map(ItemEntity.class::cast).findFirst().orElse(null);
     }
 
     private PortalViewKey key(PortalSide nearSide) {

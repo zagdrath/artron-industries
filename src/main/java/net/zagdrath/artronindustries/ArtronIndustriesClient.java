@@ -27,6 +27,7 @@ import net.zagdrath.artronindustries.client.boti.SeamlessTransition;
 import net.zagdrath.artronindustries.client.exterior.HudolinExteriorItemRenderer;
 import net.zagdrath.artronindustries.client.exterior.HudolinExteriorModel;
 import net.zagdrath.artronindustries.client.exterior.HudolinExteriorRenderer;
+import net.zagdrath.artronindustries.client.interior.InteriorDoorwayRenderer;
 import net.zagdrath.artronindustries.registry.ArtronBlockEntities;
 
 @Mod(value = ArtronIndustries.MODID, dist = Dist.CLIENT)
@@ -42,7 +43,10 @@ public class ArtronIndustriesClient {
         modEventBus.addListener(EntityRenderersEvent.RegisterLayerDefinitions.class,
                 e -> e.registerLayerDefinition(HudolinExteriorRenderer.LAYER, HudolinExteriorModel::createBodyLayer));
         modEventBus.addListener(EntityRenderersEvent.RegisterRenderers.class,
-                e -> e.registerBlockEntityRenderer(ArtronBlockEntities.TARDIS.get(), HudolinExteriorRenderer::new));
+                e -> {
+                    e.registerBlockEntityRenderer(ArtronBlockEntities.TARDIS.get(), HudolinExteriorRenderer::new);
+                    e.registerBlockEntityRenderer(ArtronBlockEntities.INTERIOR_DOORWAY.get(), InteriorDoorwayRenderer::new);
+                });
         modEventBus.addListener(RegisterSpecialModelRendererEvent.class,
                 e -> e.register(HudolinExteriorItemRenderer.ID, HudolinExteriorItemRenderer.Unbaked.MAP_CODEC));
         NeoForge.EVENT_BUS.addListener(RegisterClientCommandsEvent.class, e -> ArtronClientCommands.register(e.getDispatcher()));

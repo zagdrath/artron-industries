@@ -3,3 +3,6 @@
 # are changed when only line endings change.
 src/generated/**/.cache/* text eol=lf
 src/generated/**/*.json text eol=lf
+
+# Schematics (TARDIS interior templates) are gzipped NBT.
+*.schem binary

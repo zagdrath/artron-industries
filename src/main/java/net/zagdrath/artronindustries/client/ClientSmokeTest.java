@@ -30,7 +30,10 @@ import net.zagdrath.artronindustries.portal.DoorPairTransform;
 import net.zagdrath.artronindustries.portal.PortalSide;
 import net.zagdrath.artronindustries.registry.ArtronBlocks;
 import net.zagdrath.artronindustries.tardis.TardisInteriorManager;
+import net.zagdrath.artronindustries.tardis.DoorState;
 import net.zagdrath.artronindustries.tardis.TardisRecord;
+import net.zagdrath.artronindustries.tardis.exterior.TardisExteriors;
+import net.zagdrath.artronindustries.tardis.interior.TardisInteriors;
 
 /**
  * Automated client walkthrough used during development ({@code ./gradlew runClient -Partronindustries.clientSmokeTest=true
@@ -48,6 +51,8 @@ public final class ClientSmokeTest {
     private int timeout = 600;
     private boolean started;
     private @Nullable TardisRecord record;
+    /** A Victorian Parlour TARDIS, for its doorway. */
+    private @Nullable TardisRecord parlour;
     private BlockPos ground = BlockPos.ZERO;
 
     private ClientSmokeTest() {}
@@ -93,10 +98,14 @@ public final class ClientSmokeTest {
     }
 
     private boolean viewReady(PortalSide nearSide) {
-        if (this.record == null) {
+        return viewReady(this.record, nearSide);
+    }
+
+    private static boolean viewReady(@Nullable TardisRecord record, PortalSide nearSide) {
+        if (record == null) {
             return false;
         }
-        var view = BotiClientCache.get(new net.zagdrath.artronindustries.boti.PortalViewKey(this.record.uuid(), nearSide));
+        var view = BotiClientCache.get(new net.zagdrath.artronindustries.boti.PortalViewKey(record.uuid(), nearSide));
         return view != null && !view.isMeshDirty() && BotiMeshCache.meshCount() > 0 && BotiRenderer.lastDrawCount() > 0;
     }
 
@@ -104,6 +113,14 @@ public final class ClientSmokeTest {
     private Vec3 nearEye() {
         Vec3 anchor = this.record.exteriorShape().anchor(this.record.exteriorDoorPos(), this.record.exteriorFacing());
         return anchor.add(Vec3.atLowerCornerOf(this.record.exteriorFacing().getUnitVec3i()).scale(0.5)).add(0.0, 1.5, 0.0);
+    }
+
+    private Vec3 parlourDoor() {
+        return this.parlour.shape(PortalSide.INTERIOR).center(this.parlour.interiorDoorPos(), this.parlour.interiorDoorFacing());
+    }
+
+    private Vec3 parlourFacing() {
+        return Vec3.atLowerCornerOf(this.parlour.interiorDoorFacing().getUnitVec3i());
     }
 
     private Vec3 doorCenter(PortalSide side) {
@@ -126,7 +143,8 @@ public final class ClientSmokeTest {
                     level.setBlockAndUpdate(door.offset(dx, dy, 0), opening ? Blocks.AIR.defaultBlockState() : Blocks.LAPIS_BLOCK.defaultBlockState());
                 }
             }
-            this.record = ArtronBlocks.TARDIS.get().placeNewTardis(level, door, Direction.SOUTH);
+            // The walkthrough is built around the starter room, made to exercise BOTI.
+            this.record = ArtronBlocks.TARDIS.get().placeNewTardis(level, door, Direction.SOUTH, TardisExteriors.DEFAULT, TardisInteriors.STARTER);
             // In the last hotbar slot, so every screenshot also shows the TARDIS item model.
             server.getPlayerList().getPlayers().getFirst().getInventory().setItem(8, ArtronBlocks.TARDIS_ITEM.get().getDefaultInstance());
             TardisInteriorManager.get(server).setDoorOpen(server, this.record, true);
@@ -299,6 +317,43 @@ public final class ClientSmokeTest {
         }, null, 0);
         this.step("debug_floating_shot", () -> shot("debug_floating"), () -> !TardisInteriorManager.isInterior(Minecraft.getInstance().level)
                 && Minecraft.getInstance().levelRenderer.hasRenderedAllSections(), 60);
+        // Phase 8: the Victorian Parlour's doorway, built from the template's own blocks, opening leaf by leaf.
+        this.step("parlour_setup", () -> onServer(server -> {
+            ServerLevel level = server.overworld();
+            BlockPos door = level.getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, this.ground.offset(16, 0, 0));
+            for (int dy = 0; dy < 3; dy++) {
+                level.setBlockAndUpdate(door.above(dy), Blocks.AIR.defaultBlockState());
+            }
+            this.parlour = ArtronBlocks.TARDIS.get().placeNewTardis(level, door, Direction.SOUTH, TardisExteriors.DEFAULT, TardisInteriors.VICTORIAN_PARLOUR);
+            Vec3 inDoor = this.parlourDoor();
+            place(TardisInteriorManager.interiorLevel(server), inDoor.add(this.parlourFacing().scale(7.0)).subtract(0.0, 1.0, 0.0), inDoor);
+        }), null, 0);
+        this.step("parlour_shut_shot", () -> shot("parlour_shut"), () -> TardisInteriorManager.isInterior(Minecraft.getInstance().level)
+                && Minecraft.getInstance().levelRenderer.hasRenderedAllSections(), 60);
+        this.step("parlour_right", () -> onServer(server -> TardisInteriorManager.get(server).setDoorState(server, this.parlour, DoorState.RIGHT_OPEN)), null, 0);
+        this.step("parlour_opening_shot", () -> shot("parlour_opening"), null, 5);
+        this.step("parlour_right_shot", () -> shot("parlour_right_open"), () -> viewReady(this.parlour, PortalSide.INTERIOR), 30);
+        this.step("parlour_both", () -> onServer(server -> TardisInteriorManager.get(server).setDoorState(server, this.parlour, DoorState.BOTH_OPEN)), null, 0);
+        this.step("parlour_open_shot", () -> shot("parlour_open"), () -> viewReady(this.parlour, PortalSide.INTERIOR), 30);
+        this.step("parlour_angle", () -> onServer(server -> {
+            Vec3 inDoor = this.parlourDoor();
+            Vec3 right = Vec3.atLowerCornerOf(net.zagdrath.artronindustries.portal.PortalShape.right(this.parlour.interiorDoorFacing()).getUnitVec3i());
+            place(TardisInteriorManager.interiorLevel(server), inDoor.add(this.parlourFacing().scale(4.0)).add(right.scale(4.0)).subtract(0.0, 1.0, 0.0), inDoor);
+        }), null, 0);
+        this.step("parlour_angle_shot", () -> shot("parlour_angle"), null, 30);
+        this.step("parlour_room", () -> onServer(server -> {
+            Vec3 inDoor = this.parlourDoor();
+            place(TardisInteriorManager.interiorLevel(server), inDoor.add(this.parlourFacing().scale(1.5)).subtract(0.0, 1.0, 0.0),
+                    inDoor.add(this.parlourFacing().scale(20.0)));
+        }), null, 0);
+        this.step("parlour_room_shot", () -> shot("parlour_room"), null, 30);
+        this.step("parlour_outside", () -> onServer(server -> {
+            Vec3 exDoor = this.parlour.exteriorShape().center(this.parlour.exteriorDoorPos(), this.parlour.exteriorFacing());
+            Vec3 out = Vec3.atLowerCornerOf(this.parlour.exteriorFacing().getUnitVec3i());
+            place(server.overworld(), exDoor.add(out.scale(3.0)).subtract(0.0, 1.3, 0.0), exDoor);
+        }), null, 0);
+        this.step("parlour_outside_shot", () -> shot("parlour_outside_in"), () -> viewReady(this.parlour, PortalSide.EXTERIOR)
+                && !TardisInteriorManager.isInterior(Minecraft.getInstance().level), 60);
         this.step("quit", () -> {
             BotiRenderer.setDebugFloatingPos(null);
             ArtronIndustries.LOGGER.info("CLIENT SMOKE done: {}", String.format("rebuild %.2f ms, draw %.3f ms (%d doorways)",

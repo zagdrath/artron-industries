@@ -27,15 +27,16 @@ import net.minecraft.world.phys.Vec3;
  *     <li>right = {@code facing.getCounterClockWise()} (the viewer's right while looking into the doorway)</li>
  * </ul>
  * The doorway plane passes through the block centre offset by {@link #planeOffset} along forward. The opening is
- * centred laterally on the block, starts {@link #bottomOffset} blocks above the bottom of the block and spans
- * {@link #width} x {@link #height}.
+ * centred laterally on the block centre offset by {@link #lateralOffset} along right, starts {@link #bottomOffset} blocks
+ * above the bottom of the block and spans {@link #width} x {@link #height}.
  *
  * @param width        opening width in blocks
  * @param height       opening height in blocks
  * @param bottomOffset y offset of the bottom edge of the opening from the bottom of the door block
  * @param planeOffset  distance of the doorway plane from the block centre along {@code facing} (0.5 = front face)
+ * @param lateralOffset distance of the opening's centre line from the block centre along right
  */
-public record PortalShape(float width, float height, float bottomOffset, float planeOffset) {
+public record PortalShape(float width, float height, float bottomOffset, float planeOffset, float lateralOffset) {
     /** Default for the interior door: 1 wide, 2 tall, plane on the block's front face. */
     public static final PortalShape DEFAULT_DOOR = new PortalShape(1.0F, 2.0F, 0.0F, 0.5F);
 
@@ -43,7 +44,8 @@ public record PortalShape(float width, float height, float bottomOffset, float p
             Codec.FLOAT.fieldOf("width").forGetter(PortalShape::width),
             Codec.FLOAT.fieldOf("height").forGetter(PortalShape::height),
             Codec.FLOAT.fieldOf("bottom_offset").forGetter(PortalShape::bottomOffset),
-            Codec.FLOAT.fieldOf("plane_offset").forGetter(PortalShape::planeOffset)
+            Codec.FLOAT.fieldOf("plane_offset").forGetter(PortalShape::planeOffset),
+            Codec.FLOAT.optionalFieldOf("lateral_offset", 0.0F).forGetter(PortalShape::lateralOffset)
     ).apply(i, PortalShape::new));
 
     public static final StreamCodec<ByteBuf, PortalShape> STREAM_CODEC = StreamCodec.composite(
@@ -51,6 +53,7 @@ public record PortalShape(float width, float height, float bottomOffset, float p
             ByteBufCodecs.FLOAT, PortalShape::height,
             ByteBufCodecs.FLOAT, PortalShape::bottomOffset,
             ByteBufCodecs.FLOAT, PortalShape::planeOffset,
+            ByteBufCodecs.FLOAT, PortalShape::lateralOffset,
             PortalShape::new);
 
     public PortalShape {
@@ -59,16 +62,22 @@ public record PortalShape(float width, float height, float bottomOffset, float p
         }
     }
 
+    /** An opening centred laterally on the block. */
+    public PortalShape(float width, float height, float bottomOffset, float planeOffset) {
+        this(width, height, bottomOffset, planeOffset, 0.0F);
+    }
+
     public static Direction right(Direction facing) {
         return facing.getCounterClockWise();
     }
 
     /** Bottom-centre of the opening on the doorway plane, in world space. Paired doors map these points onto each other. */
     public Vec3 anchor(BlockPos pos, Direction facing) {
+        Direction r = right(facing);
         return new Vec3(
-                pos.getX() + 0.5 + facing.getStepX() * this.planeOffset,
+                pos.getX() + 0.5 + facing.getStepX() * this.planeOffset + r.getStepX() * this.lateralOffset,
                 pos.getY() + this.bottomOffset,
-                pos.getZ() + 0.5 + facing.getStepZ() * this.planeOffset);
+                pos.getZ() + 0.5 + facing.getStepZ() * this.planeOffset + r.getStepZ() * this.lateralOffset);
     }
 
     /** Centre of the opening on the doorway plane, in world space. */

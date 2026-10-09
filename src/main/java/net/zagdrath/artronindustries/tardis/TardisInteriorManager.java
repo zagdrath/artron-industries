@@ -161,7 +161,14 @@ public final class TardisInteriorManager extends SavedData {
         }
         record.interiorGenerated = true;
         this.setDirty();
-        record.interior.generate(level, record);
+        try {
+            record.interior.generate(level, record);
+        } catch (RuntimeException e) {
+            // Most likely a missing or broken template: leave it ungenerated so it is tried again (and the doors stay shut).
+            ArtronIndustries.LOGGER.error("Could not build interior {} for TARDIS #{}", record.interior.id(), record.id, e);
+            record.interiorGenerated = false;
+            return false;
+        }
         notifyChanged(server, record, false);
         return true;
     }

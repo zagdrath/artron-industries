@@ -22,6 +22,7 @@
     "minecraft:trapped_chest",
     "minecraft:vault",
     "minecraft:mob_spawner",
-    "minecraft:trial_spawner"
+    "minecraft:trial_spawner",
+    "artronindustries:interior_doorway"
   ]
 }

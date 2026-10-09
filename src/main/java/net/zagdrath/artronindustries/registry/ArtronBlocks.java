@@ -14,6 +14,7 @@ import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.zagdrath.artronindustries.ArtronIndustries;
 import net.zagdrath.artronindustries.block.InteriorDoorBlock;
+import net.zagdrath.artronindustries.block.InteriorDoorwayBlock;
 import net.zagdrath.artronindustries.block.TardisBlock;
 import net.zagdrath.artronindustries.block.TardisTopBlock;
 
@@ -31,6 +32,10 @@ public final class ArtronBlocks {
     public static final DeferredBlock<InteriorDoorBlock> INTERIOR_DOOR = ArtronIndustries.BLOCKS.registerBlock(
             "interior_door", InteriorDoorBlock::new,
             p -> p.mapColor(MapColor.SNOW).strength(3.0F, 1200.0F).sound(SoundType.METAL).noOcclusion().pushReaction(PushReaction.IMMOVEABLE));
+    /** A cell of a template interior's door (see InteriorDoorway). Placed only by interior generation; no item, no drops. */
+    public static final DeferredBlock<InteriorDoorwayBlock> INTERIOR_DOORWAY = ArtronIndustries.BLOCKS.registerBlock(
+            "interior_doorway", InteriorDoorwayBlock::new,
+            p -> p.strength(-1.0F, 3600000.0F).noLootTable().noOcclusion().pushReaction(PushReaction.IMMOVEABLE));
 
     public static final DeferredItem<BlockItem> TARDIS_ITEM = ArtronIndustries.ITEMS.registerSimpleBlockItem(TARDIS);
     public static final DeferredItem<BlockItem> INTERIOR_DOOR_ITEM = ArtronIndustries.ITEMS.registerSimpleBlockItem(INTERIOR_DOOR);

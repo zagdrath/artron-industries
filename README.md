@@ -33,8 +33,8 @@ an open door is seamless. Architecture, configuration, testing and how the real 
 
 Blocks: `artronindustries:tardis` (placing one creates a TARDIS) and `artronindustries:interior_door` (placeholder;
 placing one inside a TARDIS moves its interior door there). A TARDIS's exterior and interior are attributes of its block
-entity, `exterior` and `interior` (ids; defaults `artronindustries:hudolin` and `artronindustries:starter`), which an item
-can set: `/give @s artronindustries:tardis[block_entity_data={id:"artronindustries:tardis",exterior:"artronindustries:hudolin"}]`.
+entity, `exterior` and `interior` (ids; defaults `artronindustries:hudolin` and `artronindustries:victorian_parlour`; the
+other interior is `artronindustries:starter`, the BOTI test room), which an item can set: `/give @s artronindustries:tardis[block_entity_data={id:"artronindustries:tardis",exterior:"artronindustries:hudolin"}]`.
 Commands (`/artron` or `/artronindustries`, operators):
 `tardis create [exterior] [interior] | list | info [id] | enter <id> | exit [id] | door <id> open|close | delete <id>`.
 

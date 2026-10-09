@@ -141,6 +141,7 @@ public final class DoorwayCrossing {
         Direction arrivalFacing = record.doorFacing(to);
         // The entity is just behind the near plane, which maps just in front of the far plane; nudge it clear.
         Vec3 target = transform.apply(position).add(Vec3.atLowerCornerOf(arrivalFacing.getUnitVec3i()).scale(ARRIVAL_OFFSET));
+        target = intoOpening(target, record.shape(from), record.shape(to), record.doorPos(to), arrivalFacing, entity);
         PortalViewKey key = new PortalViewKey(record.uuid(), from);
         TeleportTransition transition;
         if (entity instanceof ServerPlayer serverPlayer) {
@@ -170,6 +171,27 @@ public final class DoorwayCrossing {
         COOLDOWN_UNTIL.put(moved.getUUID(), ticks + Config.CROSSING_COOLDOWN.getAsInt());
         LAST_POSITIONS.put(moved.getUUID(), new Tracked(destination.dimension(), moved.position()));
         ArtronIndustries.LOGGER.debug("{} walked through TARDIS #{} {} -> {}", entity.getName().getString(), record.id(), from, to);
+    }
+
+    /**
+     * Coming out of a wider or taller doorway than the one arrived at (a template interior's 4x4 door into the police
+     * box's), {@code target} can be beside the far doorway: it is moved in front of the far opening, so the entity steps
+     * out of the doors.
+     */
+    static Vec3 intoOpening(Vec3 target, PortalShape fromShape, PortalShape toShape, BlockPos toPos, Direction toFacing, Entity entity) {
+        if (toShape.width() < fromShape.width()) {
+            double lateral = toShape.lateral(toPos, toFacing, target);
+            double limit = Math.max(0.0, toShape.width() / 2.0 - entity.getBbWidth() / 2.0);
+            double clamped = Math.clamp(lateral, -limit, limit);
+            Direction right = PortalShape.right(toFacing);
+            target = target.add(right.getStepX() * (clamped - lateral), 0.0, right.getStepZ() * (clamped - lateral));
+        }
+        if (toShape.height() < fromShape.height()) {
+            double bottom = toPos.getY() + toShape.bottomOffset();
+            double top = Math.max(bottom, bottom + toShape.height() - entity.getBbHeight());
+            target = new Vec3(target.x, Math.clamp(target.y, bottom, top), target.z);
+        }
+        return target;
     }
 
     /**

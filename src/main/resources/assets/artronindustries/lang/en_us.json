@@ -10,6 +10,7 @@
   "block.artronindustries.tardis": "TARDIS",
   "block.artronindustries.tardis_top": "TARDIS",
   "block.artronindustries.interior_door": "TARDIS Interior Door (Placeholder)",
+  "block.artronindustries.interior_doorway": "TARDIS Doorway",
   "message.artronindustries.tardis.created": "TARDIS #%s materialised",
   "message.artronindustries.door.unlinked": "This door is not linked to a TARDIS",
   "message.artronindustries.door.no_exterior": "This TARDIS has no exterior to open onto",

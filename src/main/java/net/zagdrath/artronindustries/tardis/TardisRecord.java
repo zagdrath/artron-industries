@@ -33,7 +33,8 @@ public final class TardisRecord {
             Codec.INT.fieldOf("id").forGetter(r -> r.id),
             Codec.INT.fieldOf("cell").forGetter(r -> r.cellIndex),
             BlockPos.CODEC.fieldOf("interior_origin").forGetter(r -> r.interiorOrigin),
-            TardisInteriors.CODEC.optionalFieldOf("interior", TardisInteriors.DEFAULT).forGetter(r -> r.interior),
+            // Records from before interiors could be chosen all have the starter room.
+            TardisInteriors.CODEC.optionalFieldOf("interior", TardisInteriors.STARTER).forGetter(r -> r.interior),
             BlockPos.CODEC.fieldOf("interior_door").forGetter(r -> r.interiorDoorPos),
             Direction.CODEC.fieldOf("interior_facing").forGetter(r -> r.interiorDoorFacing),
             PortalShape.CODEC.optionalFieldOf("interior_shape", PortalShape.DEFAULT_DOOR).forGetter(r -> r.interiorShape),
@@ -86,7 +87,7 @@ public final class TardisRecord {
     }
 
     TardisRecord(UUID uuid, int id, int cellIndex, BlockPos interiorOrigin, TardisInterior interior, TardisExterior exterior) {
-        this(uuid, id, cellIndex, interiorOrigin, interior, interior.doorPos(interiorOrigin), interior.doorFacing(), PortalShape.DEFAULT_DOOR,
+        this(uuid, id, cellIndex, interiorOrigin, interior, interior.doorPos(interiorOrigin), interior.doorFacing(), interior.doorShape(),
                 false, Optional.empty(), Optional.empty(), Direction.NORTH, exterior, exterior.doorway(), false, Optional.empty());
     }
 
