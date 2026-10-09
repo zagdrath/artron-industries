@@ -143,7 +143,11 @@ public final class BotiPipelines {
     private static RenderPipeline insideDoorway(RenderPipeline pipeline, Identifier name) {
         DepthStencilState state = pipeline.getDepthStencilState();
         if (state == null) {
-            return pipeline;
+            // No depth at all (the sky's pipelines): still only inside the doorway.
+            return pipeline.toBuilder()
+                    .withLocation(name)
+                    .withDepthStencilState(new DepthStencilState(CompareOp.ALWAYS_PASS, false, 0.0F, 0.0F, INSIDE))
+                    .build();
         }
         return pipeline.toBuilder()
                 .withLocation(name)

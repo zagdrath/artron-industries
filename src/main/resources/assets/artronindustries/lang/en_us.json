@@ -32,6 +32,7 @@
   "artronindustries.configuration.renderMode": "Render Mode",
   "artronindustries.configuration.renderEntities": "Render Entities",
   "artronindustries.configuration.renderBlockEntities": "Render Block Entities",
+  "artronindustries.configuration.renderSky": "Render Outside Sky",
   "artronindustries.configuration.forceWithShaders": "Force With Shader Packs",
   "artronindustries.configuration.maxRebuildsPerFrame": "Max Mesh Rebuilds per Frame",
   "artronindustries.configuration.renderDistance": "Doorway Render Distance",

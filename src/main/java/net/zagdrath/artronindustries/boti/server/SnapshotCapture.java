@@ -29,6 +29,7 @@ import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.phys.Vec3;
 import net.zagdrath.artronindustries.ArtronIndustries;
 import net.zagdrath.artronindustries.boti.PortalEnvironment;
+import net.minecraft.util.ARGB;
 import net.zagdrath.artronindustries.boti.PortalSnapshot;
 import net.zagdrath.artronindustries.boti.SnapshotBox;
 
@@ -97,6 +98,20 @@ public final class SnapshotCapture {
         var attributes = level.environmentAttributes();
         DimensionType type = level.dimensionType();
         int biomeId = level.registryAccess().lookupOrThrow(Registries.BIOME).getId(level.getBiome(BlockPos.containing(pos)).value());
+        boolean hasSky = type.hasSkyLight() && type.skybox() != DimensionType.Skybox.NONE;
+        PortalEnvironment.Sky sky = null;
+        if (hasSky && type.skybox() == DimensionType.Skybox.OVERWORLD) {
+            sky = new PortalEnvironment.Sky(
+                    attributes.getValue(EnvironmentAttributes.SUN_ANGLE, pos, null),
+                    attributes.getValue(EnvironmentAttributes.MOON_ANGLE, pos, null),
+                    attributes.getValue(EnvironmentAttributes.STAR_ANGLE, pos, null),
+                    attributes.getValue(EnvironmentAttributes.STAR_BRIGHTNESS, pos, null),
+                    attributes.getValue(EnvironmentAttributes.MOON_PHASE, pos, null).index(),
+                    ARGB.colorFromVector4f(attributes.getValue(EnvironmentAttributes.SUNRISE_SUNSET_COLOR, pos, null)),
+                    ARGB.colorFromVector4f(attributes.getValue(EnvironmentAttributes.CLOUD_COLOR, pos, null)),
+                    attributes.getValue(EnvironmentAttributes.CLOUD_HEIGHT, pos, null),
+                    level.getGameTime());
+        }
         return new PortalEnvironment(
                 rgb(attributes.getValue(EnvironmentAttributes.SKY_COLOR, pos, null)),
                 rgb(attributes.getValue(EnvironmentAttributes.FOG_COLOR, pos, null)),
@@ -104,8 +119,9 @@ public final class SnapshotCapture {
                 level.getRainLevel(1.0F),
                 level.getThunderLevel(1.0F),
                 level.getDefaultClockTime(),
-                type.hasSkyLight() && type.skybox() != DimensionType.Skybox.NONE,
-                biomeId);
+                hasSky,
+                biomeId,
+                sky);
     }
 
     private static int rgb(Vector3fc v) {

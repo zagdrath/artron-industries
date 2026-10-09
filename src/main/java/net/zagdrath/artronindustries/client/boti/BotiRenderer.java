@@ -114,6 +114,8 @@ public final class BotiRenderer {
         @Nullable Vec3 farCamera;
         int backdropTop;
         int backdropBottom;
+        /** The outside's sky drawn in this doorway this frame (see BotiSky), or null. */
+        BotiSky.@Nullable Frame sky;
         float skyToBlock = -1.0F;
         @Nullable BotiMesh mesh;
         /** Fog uniform for everything drawn inside this doorway (fades the far side into its own fog colour). */
@@ -388,6 +390,7 @@ public final class BotiRenderer {
             // Until the far side can be drawn, leave the doorway alone rather than flash its bare backdrop.
             draw.hidden = draw.warmOnly || (!draw.fallback && !draw.debugFloating && draw.mesh == null);
         }
+        BotiSky.prepare(draws, Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaPartialTick(false));
 
         // Doorway quads for every door: mark, backdrop and seal (or a single fallback quad).
         int quads = 0;
@@ -626,6 +629,10 @@ public final class BotiRenderer {
             drawQuad(pass, BotiPipelines.MARK_DOORWAY, identity, sequential, indices.type(), draw.firstQuad);
             // 2+3. Inside it: depth back to the far plane, backdrop colour.
             drawQuad(pass, BotiPipelines.BACKDROP, identity, sequential, indices.type(), draw.firstQuad + 1);
+            // 3b. Looking out: the outside's sky, sun, moon, stars and clouds in front of the backdrop, behind everything else.
+            if (draw.sky != null) {
+                BotiSky.render(pass, view, draw);
+            }
             // 4. The far side: block mesh, then block entities and entities through the stencil pipeline modifier.
             if (draw.fog != null) {
                 pass.setUniform("Fog", draw.fog.slice());
@@ -695,6 +702,7 @@ public final class BotiRenderer {
     }
 
     private static void endFrame() {
+        BotiSky.endFrame();
         if (featureFrame != null) {
             featureFrame.close();
             featureFrame = null;

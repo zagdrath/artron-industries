@@ -37,6 +37,9 @@ public final class ArtronClientConfig {
             .comment("Maximum number of entities drawn through one doorway.")
             .defineInRange("maxEntities", 32, 0, 256);
 
+    public static final ModConfigSpec.BooleanValue RENDER_SKY = BUILDER
+            .comment("Looking out of a TARDIS, draw the outside's sky, sun, moon, stars and clouds in the doorway.")
+            .define("renderSky", true);
     public static final ModConfigSpec.BooleanValue RENDER_BLOCK_ENTITIES = BUILDER
             .comment("Draw block entities (chests, signs, ...) through the nearest open doorway.")
             .define("renderBlockEntities", true);

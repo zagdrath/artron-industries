@@ -38,6 +38,7 @@ public class ArtronIndustriesClient {
         ArtronClientNetwork.init(modEventBus);
         BotiPipelines.init(modEventBus);
         BotiRenderer.init();
+        net.zagdrath.artronindustries.client.boti.BotiSky.init(modEventBus);
         SeamlessTransition.init(modEventBus);
         BotiDebugEntry.init(modEventBus);
         modEventBus.addListener(EntityRenderersEvent.RegisterLayerDefinitions.class,

@@ -148,6 +148,16 @@ Its renderer implements `BotiDoorOverlay`; the nearest drawn doorway's own door 
 BOTI's feature frame, in near-side camera space, and drawn inside the stencil after the far side's blocks, so the leaves
 sort against the far side as if they swung into it. The Hudolin exterior (`HudolinExteriorRenderer`) does this.
 
+**The outside's sky.** Looking out of a TARDIS, the nearest doorway that faces an overworld-like sky also gets that
+sky (`BotiSky`): vanilla's sky disc, sunrise/sunset glow, sun, moon, stars and clouds, drawn inside the doorway's stencil
+after the backdrop and before the far side's blocks, turned with the door pair. The server samples the far side's own
+environment attributes at the doorway (sun, moon and star angles, star brightness, moon phase, sunrise and cloud colours,
+cloud height, game time) into `PortalEnvironment.Sky`, refreshed with the rest of the environment; in between, the sun,
+moon and stars keep moving at the rate seen between the last two samples and the clouds drift with the far game time.
+Vanilla's sky renderer is borrowed (the interior has no sky; three of its private draw methods are opened by access
+transformer, as `SkyRenderer#render` opens its own pass); the clouds have their own `CloudRenderer`, prepared before the
+frame. Sky and clouds fade into the far side's fog colour like vanilla's. Off with `boti.renderSky`.
+
 **Shader packs.** If Iris or Oculus is installed, doorways use the fallback surface (dark shimmer) unless
 `boti.forceWithShaders` is set: shader packs replace the pipelines BOTI relies on. The same fallback is used for
 `renderMode = DISABLED` and if no stencil bit is available.
@@ -184,6 +194,7 @@ by the server):
 | `boti.renderEntities` | true | Draw entities through doorways. |
 | `boti.maxEntities` | 32 | Entities drawn per doorway. |
 | `boti.renderBlockEntities` | true | Draw block entities through the nearest doorway. |
+| `boti.renderSky` | true | Looking out, draw the outside's sky, sun, moon, stars and clouds in the doorway. |
 | `boti.forceWithShaders` | false | Render the real view even with Iris/Oculus present. |
 | `boti.maxRebuildsPerFrame` | 1 | Mesh rebuilds started per frame. |
 | `boti.renderDistance` | 64 | Doorways further away are not drawn. |
@@ -279,8 +290,9 @@ draw recording 0.02–0.07 ms of CPU per frame for 1–2 doorways.
 * Block entities and entities are drawn only through the nearest open doorway (one BOTI feature frame per frame).
 * Stand-in entities are attached to the client level for their renderers but positioned in far-side coordinates;
   renderers that query the level around themselves (rare) see the near side. Name tags face the near-side camera.
-* Weather particles and the real sky (sun, moon, stars, clouds) are not drawn through doorways; the backdrop is a sky → fog
-  gradient that darkens with rain.
+* Weather particles are not drawn through doorways. The outside's sky is drawn through one doorway per frame (the
+  nearest looking out); others show the sky → fog gradient backdrop. End and Nether skyboxes are not drawn.
+* Terrain beyond the streamed box (`exteriorSnapshot*`) is not drawn: the view fades into fog at its far end.
 * Biome tint is blended over 3×3 columns, not the player's biome blend setting. Cardinal (face) shading uses the default
   profile, even for Nether-like far sides.
 * A player arriving through a doorway is held for the few ticks until its chunk reaches the client (rendering is covered by

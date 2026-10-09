@@ -335,6 +335,18 @@ public final class ClientSmokeTest {
         this.step("parlour_right_shot", () -> shot("parlour_right_open"), () -> viewReady(this.parlour, PortalSide.INTERIOR), 30);
         this.step("parlour_both", () -> onServer(server -> TardisInteriorManager.get(server).setDoorState(server, this.parlour, DoorState.BOTH_OPEN)), null, 0);
         this.step("parlour_open_shot", () -> shot("parlour_open"), () -> viewReady(this.parlour, PortalSide.INTERIOR), 30);
+        // Looking up and out through the open doors: the outside's clouds by day, its moon and stars by night.
+        this.step("parlour_sky", () -> onServer(server -> {
+            Vec3 inDoor = this.parlourDoor();
+            place(TardisInteriorManager.interiorLevel(server), inDoor.add(this.parlourFacing().scale(2.5)).subtract(0.0, 2.0, 0.0),
+                    inDoor.subtract(this.parlourFacing().scale(6.0)).add(0.0, 7.0, 0.0));
+        }), null, 0);
+        this.step("parlour_sky_shot", () -> shot("parlour_sky"), null, 40);
+        this.step("parlour_midnight", () -> onServer(server -> server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "time set 18000")), null, 0);
+        this.step("parlour_night_shot", () -> shot("parlour_night_sky"), null, 60);
+        this.step("parlour_dusk", () -> onServer(server -> server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "time set 12700")), null, 0);
+        this.step("parlour_dusk_shot", () -> shot("parlour_dusk_sky"), null, 60);
+        this.step("parlour_noon", () -> onServer(server -> server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "time set 6000")), null, 0);
         this.step("parlour_angle", () -> onServer(server -> {
             Vec3 inDoor = this.parlourDoor();
             Vec3 right = Vec3.atLowerCornerOf(net.zagdrath.artronindustries.portal.PortalShape.right(this.parlour.interiorDoorFacing()).getUnitVec3i());
@@ -387,10 +399,25 @@ public final class ClientSmokeTest {
         if (this.index >= this.steps.size()) {
             return;
         }
+        if (mc.player.isDeadOrDying()) {
+            // A run that stopped part-way can leave the player falling out of the bottom of the interior dimension.
+            mc.player.respawn();
+            this.wait = 40;
+            return;
+        }
         if (!this.started) {
             this.started = true;
             mc.options.pauseOnLostFocus = false;
             ArtronIndustries.LOGGER.info("CLIENT SMOKE starting");
+            // Start from the overworld, whatever dimension (or void) the last run left the player in.
+            onServer(server -> {
+                ServerPlayer player = server.getPlayerList().getPlayers().getFirst();
+                BlockPos spawn = server.overworld().getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, BlockPos.ZERO);
+                player.teleportTo(server.overworld(), spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5, java.util.Set.of(), 0.0F, 0.0F, false);
+                player.setHealth(player.getMaxHealth());
+            });
+            this.wait = 40;
+            return;
         }
         if (this.wait > 0) {
             this.wait--;
