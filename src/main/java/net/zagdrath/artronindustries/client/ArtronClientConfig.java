@@ -67,6 +67,15 @@ public final class ArtronClientConfig {
 
     static {
         BUILDER.pop();
+        BUILDER.comment("TARDIS interiors").push("interior");
+    }
+
+    public static final ModConfigSpec.DoubleValue HUM_VOLUME = BUILDER
+            .comment("Volume of the interior hum (0 = off), on top of the Ambient/Environment sound slider.")
+            .defineInRange("humVolume", 0.6, 0.0, 1.0);
+
+    static {
+        BUILDER.pop();
     }
 
     public static final ModConfigSpec SPEC = BUILDER.build();

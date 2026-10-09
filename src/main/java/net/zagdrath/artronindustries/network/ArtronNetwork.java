@@ -14,7 +14,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
  * dedicated server never loads client classes.
  */
 public final class ArtronNetwork {
-    public static final String VERSION = "2";
+    public static final String VERSION = "3";
 
     private ArtronNetwork() {}
 
@@ -26,5 +26,6 @@ public final class ArtronNetwork {
         registrar.playToClient(BotiEntitiesPayload.TYPE, BotiEntitiesPayload.STREAM_CODEC);
         registrar.playToClient(BotiCrossingPayload.TYPE, BotiCrossingPayload.STREAM_CODEC);
         registrar.playToClient(BotiArrivalPayload.TYPE, BotiArrivalPayload.STREAM_CODEC);
+        registrar.playToClient(InteriorPresencePayload.TYPE, InteriorPresencePayload.STREAM_CODEC);
     }
 }

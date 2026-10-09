@@ -1,0 +1,10 @@
+{
+  "interior_hum.victorian_parlour": {
+    "sounds": [
+      {
+        "name": "artronindustries:interior_hum/victorian_parlour",
+        "stream": false
+      }
+    ]
+  }
+}

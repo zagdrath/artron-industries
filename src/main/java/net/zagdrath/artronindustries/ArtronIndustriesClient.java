@@ -19,6 +19,7 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.zagdrath.artronindustries.client.ArtronClientCommands;
 import net.zagdrath.artronindustries.client.ArtronClientConfig;
 import net.zagdrath.artronindustries.client.ClientSmokeTest;
+import net.zagdrath.artronindustries.client.InteriorHum;
 import net.zagdrath.artronindustries.client.boti.ArtronClientNetwork;
 import net.zagdrath.artronindustries.client.boti.BotiDebugEntry;
 import net.zagdrath.artronindustries.client.boti.BotiPipelines;
@@ -36,6 +37,7 @@ public class ArtronIndustriesClient {
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
         container.registerConfig(ModConfig.Type.CLIENT, ArtronClientConfig.SPEC, ArtronIndustries.MODID + "-client.toml");
         ArtronClientNetwork.init(modEventBus);
+        InteriorHum.init(modEventBus);
         BotiPipelines.init(modEventBus);
         BotiRenderer.init();
         net.zagdrath.artronindustries.client.boti.BotiSky.init(modEventBus);

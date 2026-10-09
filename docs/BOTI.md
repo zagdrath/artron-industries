@@ -218,6 +218,7 @@ by the server):
 | `boti.renderDistance` | 64 | Doorways further away are not drawn. |
 | `boti.interiorBackdropColor` | 0x05060a | Colour behind interior geometry. |
 | `boti.debugTimings` | false | Log rebuild timings at INFO. |
+| `interior.humVolume` | 0.6 | Volume of the interior hum (0 = off), on top of the Ambient/Environment slider. |
 
 ## Exteriors and interiors
 
@@ -236,6 +237,21 @@ block entity and in its `TardisRecord`:
 Both are set from the item's `block_entity_data` when placed (or by `/artron tardis create [exterior] [interior]`).
 Unknown ids in saves load as the defaults. To add an exterior, subclass `TardisExterior` and register it in
 `TardisExteriors`; to add an interior, register a `TardisInterior` in `TardisInteriors`.
+
+### Interior hums
+
+An interior can have a hum (`TardisInterior#withHum`, a sound event in `ArtronSounds`), which loops for every player
+inside it. The server tells each player which interior's cell they are in (`InteriorPresence`, checked every 5 ticks,
+`InteriorPresencePayload` sent only on change), and the client (`InteriorHum`) fades the hum in over 1.5 s on entering and
+out on leaving. It is not positional and plays on the ambient channel. The Victorian Parlour hums like the 1996 TARDIS.
+
+For a gapless loop the sound must be `"stream": false` in `sounds.json`: vanilla then loops it in OpenAL, where a
+streamed sound is reopened at the end. The file itself must also loop seamlessly. The parlour's hum
+(`sounds/interior_hum/victorian_parlour.ogg`, 18.216 s) was cut from a 10-minute recording of a repeating 3.643229 s cycle:
+5 whole cycles (803,332 samples at 44.1 kHz, within 0.03 of a sample of exact, so it does not drift), taken from the steady
+middle at the quietest point of the cycle, with the first 0.25 s crossfaded with the audio that followed the cut in the
+recording, so the last sample leads into the first as it did originally. Ogg Vorbis records the exact length, so it decodes
+to exactly that many samples with no padding.
 
 ### Interior templates
 

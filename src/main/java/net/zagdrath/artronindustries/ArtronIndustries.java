@@ -27,8 +27,10 @@ import net.zagdrath.artronindustries.gametest.SmokeTest;
 import net.zagdrath.artronindustries.registry.ArtronBlockEntities;
 import net.zagdrath.artronindustries.network.ArtronNetwork;
 import net.zagdrath.artronindustries.registry.ArtronBlocks;
+import net.zagdrath.artronindustries.registry.ArtronSounds;
 import net.zagdrath.artronindustries.registry.ArtronTickets;
 import net.zagdrath.artronindustries.tardis.DoorwayCrossing;
+import net.zagdrath.artronindustries.tardis.InteriorPresence;
 
 @Mod(ArtronIndustries.MODID)
 public class ArtronIndustries {
@@ -58,6 +60,7 @@ public class ArtronIndustries {
         ArtronBlockEntities.BLOCK_ENTITY_TYPES.register(modEventBus);
         ArtronGameTests.TEST_FUNCTIONS.register(modEventBus);
         ArtronTickets.TICKET_TYPES.register(modEventBus);
+        ArtronSounds.SOUND_EVENTS.register(modEventBus);
         modEventBus.addListener(RegisterPayloadHandlersEvent.class, ArtronNetwork::register);
 
         modContainer.registerConfig(localConfigType(), Config.SPEC, MODID + "-common.toml");
@@ -65,6 +68,7 @@ public class ArtronIndustries {
         NeoForge.EVENT_BUS.addListener(RegisterCommandsEvent.class, e -> ArtronCommands.register(e.getDispatcher()));
         PortalWatcher.init();
         DoorwayCrossing.init();
+        InteriorPresence.init();
         SmokeTest.registerIfEnabled();
     }
 
